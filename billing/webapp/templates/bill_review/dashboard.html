@@ -1,0 +1,191 @@
+<!-- billing/webapp/bill_review/templates/bill_review/dashboard.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Bill Review Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h1 class="mb-4">Bill Review Dashboard</h1>
+
+    <!-- Flagged Bills Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h2 class="h5 mb-0">Flagged Bills</h2>
+        </div>
+        <div class="card-body">
+            {% if flagged_bills %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Claim ID</th>
+                            <th>Patient</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                            <th>Error</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in flagged_bills %}
+                        <tr>
+                            <td>{{ bill.id }}</td>
+                            <td>{{ bill.claim_id }}</td>
+                            <td>{{ bill.patient_id }}</td>
+                            <td>{{ bill.provider_name }}</td>
+                            <td><span class="badge bg-warning">{{ bill.status }}</span></td>
+                            <td>{{ bill.action|default:"-" }}</td>
+                            <td>{{ bill.last_error|default:"-" }}</td>
+                            <td>{{ bill.order_date|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'bill_review:bill_detail' bill.id %}" 
+                                       class="btn btn-sm btn-primary">View</a>
+                                    <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" 
+                                          class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-secondary"
+                                                onclick="return confirm('Reset this bill to MAPPED status?')">
+                                            Reset
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                No flagged bills found.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Error Bills Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-danger text-white">
+            <h2 class="h5 mb-0">Error Bills</h2>
+        </div>
+        <div class="card-body">
+            {% if error_bills %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Claim ID</th>
+                            <th>Patient</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                            <th>Error</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in error_bills %}
+                        <tr>
+                            <td>{{ bill.id }}</td>
+                            <td>{{ bill.claim_id }}</td>
+                            <td>{{ bill.patient_id }}</td>
+                            <td>{{ bill.provider_name }}</td>
+                            <td><span class="badge bg-danger">{{ bill.status }}</span></td>
+                            <td>{{ bill.action|default:"-" }}</td>
+                            <td>{{ bill.last_error|default:"-" }}</td>
+                            <td>{{ bill.order_date|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'bill_review:bill_detail' bill.id %}" 
+                                       class="btn btn-sm btn-primary">View</a>
+                                    <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" 
+                                          class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-secondary"
+                                                onclick="return confirm('Reset this bill to MAPPED status?')">
+                                            Reset
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                No error bills found.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Arthrogram Bills Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h2 class="h5 mb-0">Arthrogram Bills</h2>
+        </div>
+        <div class="card-body">
+            {% if arthrogram_bills %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Claim ID</th>
+                            <th>Patient</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                            <th>Error</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in arthrogram_bills %}
+                        <tr>
+                            <td>{{ bill.id }}</td>
+                            <td>{{ bill.claim_id }}</td>
+                            <td>{{ bill.patient_id }}</td>
+                            <td>{{ bill.provider_name }}</td>
+                            <td><span class="badge bg-info">{{ bill.status }}</span></td>
+                            <td>{{ bill.action|default:"-" }}</td>
+                            <td>{{ bill.last_error|default:"-" }}</td>
+                            <td>{{ bill.order_date|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'bill_review:bill_detail' bill.id %}" 
+                                       class="btn btn-sm btn-primary">View</a>
+                                    <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" 
+                                          class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-secondary"
+                                                onclick="return confirm('Reset this bill to MAPPED status?')">
+                                            Reset
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                No arthrogram bills found.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

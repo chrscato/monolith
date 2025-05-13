@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Bill {{ bill.bill_id }} - Billing Review{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Bill Review</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Failed Bills</a></li>
+                <li class="breadcrumb-item active">Bill {{ bill.bill_id }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Bill Information</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-4">Bill ID</dt>
+                    <dd class="col-sm-8">{{ bill.bill_id }}</dd>
+
+                    <dt class="col-sm-4">Claim ID</dt>
+                    <dd class="col-sm-8">{{ bill.claim_id }}</dd>
+
+                    <dt class="col-sm-4">Patient Name</dt>
+                    <dd class="col-sm-8">{{ bill.patient_name }}</dd>
+
+                    <dt class="col-sm-4">Patient DOB</dt>
+                    <dd class="col-sm-8">{{ bill.patient_dob }}</dd>
+
+                    <dt class="col-sm-4">Provider Name</dt>
+                    <dd class="col-sm-8">{{ bill.provider_name }}</dd>
+
+                    <dt class="col-sm-4">Provider NPI</dt>
+                    <dd class="col-sm-8">{{ bill.provider_npi }}</dd>
+
+                    <dt class="col-sm-4">Total Charge</dt>
+                    <dd class="col-sm-8">${{ "%.2f"|format(bill.total_charge) }}</dd>
+
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge {% if bill.status == 'pending' %}bg-warning{% elif bill.status == 'approved' %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ bill.status|title }}
+                        </span>
+                    </dd>
+
+                    <dt class="col-sm-4">Failure Type</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge bg-warning text-dark">{{ bill.failure_type|replace('_', ' ')|title }}</span>
+                    </dd>
+
+                    <dt class="col-sm-4">Failure Details</dt>
+                    <dd class="col-sm-8">{{ bill.failure_details }}</dd>
+                </dl>
+            </div>
+            <div class="card-footer">
+                <form action="{{ url_for('update_bill', bill_id=bill.bill_id) }}" method="post" class="d-inline">
+                    <input type="hidden" name="status" value="approved">
+                    <button type="submit" class="btn btn-success">Approve</button>
+                </form>
+                <form action="{{ url_for('update_bill', bill_id=bill.bill_id) }}" method="post" class="d-inline">
+                    <input type="hidden" name="status" value="rejected">
+                    <button type="submit" class="btn btn-danger">Reject</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Line Items</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>CPT Code</th>
+                                <th>Amount</th>
+                                <th>Service Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in bill.line_items %}
+                            <tr>
+                                <td>{{ item.line_item_id }}</td>
+                                <td>{{ item.cpt_code }}</td>
+                                <td>${{ "%.2f"|format(item.charge_amount) }}</td>
+                                <td>{{ item.date_of_service }}</td>
+                                <td>
+                                    <span class="badge {% if item.status == 'pending' %}bg-warning{% elif item.status == 'approved' %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ item.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <form action="{{ url_for('update_line_item', item_id=item.id) }}" method="post" class="d-inline">
+                                        <input type="hidden" name="status" value="{% if item.status == 'pending' %}approved{% else %}pending{% endif %}">
+                                        <button type="submit" class="btn btn-sm {% if item.status == 'pending' %}btn-success{% else %}btn-warning{% endif %}">
+                                            {% if item.status == 'pending' %}Approve{% else %}Reset{% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,12 @@
+[33ma4cc0d0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m Re-add view PDF button without .env
+[33m7991f70[m Add .env paths to .gitignore
+[33m43d4471[m Remove tracked .env files and update .gitignore
+[33m84c49d9[m[33m ([m[1;31morigin/master[m[33m)[m build out webapp for corrections
+[33mda02acc[m building webapp
+[33m6a307e3[m 5.11.25 process edits
+[33m7b43a1b[m setup intake app
+[33m2aea58b[m start with process
+[33m6c99678[m build out preprocess
+[33m48ebd8b[m progress
+[33mee53d02[m Remove monolith.db from tracking and update .gitignore
+[33meeeef60[m Initial commit
