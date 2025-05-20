@@ -15,12 +15,15 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime
 
-# Get the project root directory (2 levels up from this file)
+# Get the project root directory (2 levels up from this file) for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
+# Get the absolute path to the monolith root directory
+DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+
 # Load environment variables from the root .env file
-load_dotenv(PROJECT_ROOT / '.env')
+load_dotenv(DB_ROOT / '.env')
 
 # Import S3 helper functions
 from config.s3_utils import list_objects, download, upload, move
@@ -32,8 +35,8 @@ ARCHIVE_PREFIX = 'data/ProviderBills/txt/archive/'
 LOG_PREFIX = 'logs/extract_errors.log'
 S3_BUCKET = os.getenv('S3_BUCKET', 'bill-review-prod')
 
-# Load prompt from project root
-PROMPT_PATH = PROJECT_ROOT / 'preprocess' / 'utils' / 'gpt41_prompt.txt'
+# Load prompt from utils directory
+PROMPT_PATH = Path(__file__).resolve().parent / 'gpt41_prompt.txt'
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -87,7 +90,9 @@ def clean_gpt_output(raw: str) -> str:
 
 def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> bool:
     """Update ProviderBill record and create BillLineItem entries in the database."""
-    db_path = PROJECT_ROOT / 'monolith.db'
+    # Use the absolute path to monolith.db
+    db_path = DB_ROOT / 'monolith.db'
+    print(f"Connecting to database at: {db_path}")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -101,10 +106,16 @@ def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> 
         if 'total_charge' in billing_info:
             total_charge = float(billing_info['total_charge'].replace('$', '').replace(',', ''))
         
+        # First check if the record exists
+        cursor.execute("SELECT id FROM ProviderBill WHERE id = ?", (provider_bill_id,))
+        if not cursor.fetchone():
+            print(f"Record {provider_bill_id} not found in ProviderBill table")
+            return False
+        
         # Update ProviderBill record with all fields
         cursor.execute(
             """
-            UPDATE ProviderBill 
+            UPDATE "ProviderBill" 
             SET status = ?,
                 last_error = NULL,
                 patient_name = ?,
@@ -115,11 +126,13 @@ def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> 
                 billing_provider_tin = ?,
                 billing_provider_npi = ?,
                 total_charge = ?,
-                patient_account_no = ?
+                patient_account_no = ?,
+                action = NULL,
+                bill_paid = 'N'
             WHERE id = ?
             """,
             (
-                'REVIEWED',
+                'RECEIVED',
                 patient_info.get('patient_name'),
                 patient_info.get('patient_dob'),
                 patient_info.get('patient_zip'),
@@ -143,7 +156,7 @@ def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> 
             
             cursor.execute(
                 """
-                INSERT INTO BillLineItem (
+                INSERT INTO "BillLineItem" (
                     provider_bill_id, cpt_code, modifier, units,
                     charge_amount, allowed_amount, decision,
                     reason_code, date_of_service, place_of_service,
@@ -186,9 +199,14 @@ def process_llm_s3(limit=None):
 
     for key in json_keys:
         print(f"→ Processing s3://{S3_BUCKET}/{key}")
-        local_json = download(key, os.path.join(tempfile.gettempdir(), os.path.basename(key)))
-        output_json = None
+        local_json = None
+        temp_output = None
         try:
+            # Download the file to a temporary location
+            temp_dir = tempfile.gettempdir()
+            local_json = os.path.join(temp_dir, os.path.basename(key))
+            download(key, local_json)
+            
             # Read the OCR JSON file
             with open(local_json, 'r', encoding='utf-8') as f:
                 ocr_data = json.load(f)
@@ -198,64 +216,48 @@ def process_llm_s3(limit=None):
             provider_bill_id = ocr_data.get('provider_bill_id', '')
             
             # Process with LLM
-            raw_output = extract_data_via_llm(prompt, ocr_text)
-            cleaned = clean_gpt_output(raw_output)
-
-            if not cleaned.startswith('{'):
-                raise ValueError('LLM output not JSON')
-
-            # Parse and clean the extracted data
-            parsed = json.loads(cleaned)
-            parsed = fix_all_charges(parsed)
+            extracted_json = extract_data_via_llm(prompt, ocr_text)
+            extracted_data = json.loads(clean_gpt_output(extracted_json))
             
-            # Add metadata
-            parsed['provider_bill_id'] = provider_bill_id
-            parsed['processed_at'] = datetime.now().isoformat()
-
-            # Update database record
-            if not update_provider_bill_record(provider_bill_id, parsed):
-                raise Exception("Failed to update database record")
-
-            # Print JSON structure for debugging
-            print("\nJSON Structure:")
-            print(json.dumps(parsed, indent=2))
-            print("\nChecking required fields:")
-            print(f"patient_info.patient_name: {parsed.get('patient_info', {}).get('patient_name', 'MISSING')}")
-            service_lines = parsed.get('service_lines', [])
-            print(f"service_lines[0].date_of_service: {service_lines[0].get('date_of_service', 'MISSING') if service_lines else 'NO SERVICE LINES'}")
-
-            # Write JSON locally
-            output_json = tempfile.mktemp(suffix='.json')
-            with open(output_json, 'w', encoding='utf-8') as jf:
-                json.dump(parsed, jf, indent=4)
-
-            # Upload JSON to S3
-            base = os.path.splitext(os.path.basename(key))[0]
-            s3_json_key = f"{OUTPUT_PREFIX}{base}.json"
-            upload(output_json, s3_json_key)
-            print(f"✔ Uploaded JSON to s3://{S3_BUCKET}/{s3_json_key}")
-
-            # Archive original text
-            archived_key = key.replace(INPUT_PREFIX, ARCHIVE_PREFIX)
-            move(key, archived_key)
-            print(f"✔ Archived text to s3://{S3_BUCKET}/{archived_key}\n")
-
+            # Clean up charge amounts
+            extracted_data = fix_all_charges(extracted_data)
+            
+            # Update database
+            if update_provider_bill_record(provider_bill_id, extracted_data):
+                # Save to S3
+                output_key = f"{OUTPUT_PREFIX}{provider_bill_id}.json"
+                temp_output = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False)
+                json.dump(extracted_data, temp_output, indent=2)
+                temp_output.close()  # Close the file before uploading
+                
+                upload(temp_output.name, output_key)
+                os.unlink(temp_output.name)  # Clean up temp file
+                
+                # Archive the input file
+                archive_key = f"{ARCHIVE_PREFIX}{os.path.basename(key)}"
+                move(key, archive_key)
+                print(f"✓ Processed and archived: {key}")
+            else:
+                print(f"❌ Database update failed for: {key}")
+                
         except Exception as e:
-            err = f"❌ Extraction error {key}: {e}"
-            print(err)
-            log_local = tempfile.mktemp(suffix='.log')
-            with open(log_local, 'a', encoding='utf-8') as logf:
-                logf.write(err + '\n')
-            upload(log_local, LOG_PREFIX)
-            os.remove(log_local)
-
+            print(f"❌ Extraction error {key}: {str(e)}")
+            # Write error to log file
+            temp_log = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False)
+            temp_log.write(f"Error processing {key}: {str(e)}\n")
+            temp_log.close()  # Close the file before uploading
+            
+            upload(temp_log.name, LOG_PREFIX)
+            os.unlink(temp_log.name)  # Clean up temp file
         finally:
-            if os.path.exists(local_json):
-                os.remove(local_json)
-            if output_json and os.path.exists(output_json):
-                os.remove(output_json)
+            # Clean up the downloaded file
+            if local_json and os.path.exists(local_json):
+                try:
+                    os.unlink(local_json)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {local_json}: {str(e)}")
 
-    print("LLM extraction complete.")
+    print("LLM processing complete")
 
 
 if __name__ == '__main__':

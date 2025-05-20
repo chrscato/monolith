@@ -17,15 +17,17 @@ from google.cloud import vision
 from google.cloud.vision_v1 import types
 from datetime import datetime
 
-# Get the project root directory (2 levels up from this file)
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# Get the project root directory (3 levels up from this file)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
 # Load environment variables from the root .env file
 load_dotenv(PROJECT_ROOT / '.env')
 
 # Set credentials path relative to project root
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(PROJECT_ROOT / 'googlecloud.json')
+credentials_path = PROJECT_ROOT / 'config' / 'googlecloud.json'
+print(f"Looking for credentials at: {credentials_path}")
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(credentials_path)
 
 # Import S3 helper functions
 from config.s3_utils import list_objects, download, upload, move

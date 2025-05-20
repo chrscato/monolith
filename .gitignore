@@ -53,11 +53,14 @@ coverage.xml
 cover/
 downloaded_v1_jsons/
 
-
+# Environment and credentials
 .env
 .env.backup
 billing/.env
 billing/webapp/.environments
+config/googlecloud.json
+config/*.json
+config/credentials/*.json
 
 *.parquet
 *.csv
@@ -76,8 +79,6 @@ billing/webapp/.environments
 *.out
 *.pid
 *.egg-info/
-
-
 
 # Translations
 *.mo

@@ -1,17 +1,59 @@
 <!-- billing/webapp/bill_review/templates/base.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bill Review Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>{% block title %}Bill Review Dashboard{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    {% block extra_css %}{% endblock %}
     <style>
+        :root {
+            --transition-speed: 0.3s;
+        }
+
+        body {
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+        }
+
+        [data-bs-theme="dark"] {
+            --bs-body-bg: #212529;
+            --bs-body-color: #f8f9fa;
+        }
+
+        [data-bs-theme="dark"] .table {
+            --bs-table-bg: #2c3034;
+            --bs-table-color: #f8f9fa;
+            --bs-table-border-color: #373b3e;
+        }
+
+        [data-bs-theme="dark"] .card {
+            --bs-card-bg: #2c3034;
+            --bs-card-border-color: #373b3e;
+        }
+
         .table th {
             white-space: nowrap;
         }
+
         .badge {
             font-size: 0.875em;
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            transition: background-color var(--transition-speed);
+        }
+
+        .theme-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        [data-bs-theme="dark"] .theme-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.05);
         }
     </style>
 </head>
@@ -19,12 +61,41 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="{% url 'bill_review:dashboard' %}">Bill Review Dashboard</a>
+            <button class="theme-toggle btn btn-link text-light" id="themeToggle" title="Toggle dark mode">
+                <i class="bi bi-moon-fill"></i>
+            </button>
         </div>
     </nav>
 
     {% block content %}
     {% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+            
+            // Check for saved theme preference
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            html.setAttribute('data-bs-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+
+            themeToggle.addEventListener('click', function() {
+                const currentTheme = html.getAttribute('data-bs-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                
+                html.setAttribute('data-bs-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateThemeIcon(newTheme);
+            });
+
+            function updateThemeIcon(theme) {
+                const icon = themeToggle.querySelector('i');
+                icon.className = theme === 'light' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+            }
+        });
+    </script>
 </body>
 </html>

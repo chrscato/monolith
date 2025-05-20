@@ -15,8 +15,17 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-her
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://cdx-billreview.ngrok.io',
+]
+
+
 # Allow both localhost and 127.0.0.1 for local development
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'cdx-billreview.ngrok.io',  # ✅ Add this line
+]
 
 # Authentication settings
 LOGIN_URL = '/admin/login/'

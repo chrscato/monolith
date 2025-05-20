@@ -13,12 +13,15 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Get the project root directory (2 levels up from this file)
+# Get the project root directory (2 levels up from this file) for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
 # Load environment variables from the root .env file
 load_dotenv(PROJECT_ROOT / '.env')
+
+# Get the absolute path to the monolith root directory
+DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +32,12 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
     Validate a ProviderBill record and its line items.
     Returns (status, action, error_message)
     """
+    # Get the connection from the cursor
+    conn = cursor.connection
+    if not hasattr(conn, 'row_factory') or conn.row_factory != sqlite3.Row:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+    
     # Get the ProviderBill record
     cursor.execute("""
         SELECT * FROM ProviderBill WHERE id = ?
@@ -68,11 +77,65 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
         
         # Check date of service
         try:
-            service_date = datetime.strptime(item['date_of_service'], '%m/%d/%y')
-            if service_date > datetime.now():
-                errors.append(f"Future date of service: {item['date_of_service']}")
-        except ValueError:
-            errors.append(f"Invalid date format: {item['date_of_service']}")
+            # Handle date range format (e.g., "01/17/2025 - 01/17/2025" or "11/25/24 - 11/25/24")
+            date_str = item['date_of_service']
+            
+            # Check for any type of dash or hyphen
+            if any(sep in date_str for sep in [' - ', '–', '—', '-']):
+                # Split on any type of dash/hyphen and clean up spaces
+                for sep in [' - ', '–', '—', '-']:
+                    if sep in date_str:
+                        start_date_str, end_date_str = [d.strip() for d in date_str.split(sep)]
+                        break
+                
+                # Try parsing both dates with different formats
+                start_date = None
+                end_date = None
+                
+                # Try 4-digit year format first
+                try:
+                    start_date = datetime.strptime(start_date_str, '%m/%d/%Y')
+                except ValueError:
+                    try:
+                        start_date = datetime.strptime(start_date_str, '%m/%d/%y')
+                    except ValueError:
+                        errors.append(f"Invalid start date format: {start_date_str}")
+                
+                try:
+                    end_date = datetime.strptime(end_date_str, '%m/%d/%Y')
+                except ValueError:
+                    try:
+                        end_date = datetime.strptime(end_date_str, '%m/%d/%y')
+                    except ValueError:
+                        errors.append(f"Invalid end date format: {end_date_str}")
+                
+                # If both dates were successfully parsed, perform validation
+                if start_date and end_date:
+                    # Check if dates are in the future
+                    if start_date > datetime.now():
+                        errors.append(f"Future start date: {start_date_str}")
+                    if end_date > datetime.now():
+                        errors.append(f"Future end date: {end_date_str}")
+                    
+                    # Check if end date is before start date
+                    if end_date < start_date:
+                        errors.append(f"End date before start date: {date_str}")
+            else:
+                # Handle single date format
+                try:
+                    service_date = datetime.strptime(date_str, '%m/%d/%Y')
+                    if service_date > datetime.now():
+                        errors.append(f"Future date of service: {date_str}")
+                except ValueError:
+                    try:
+                        service_date = datetime.strptime(date_str, '%m/%d/%y')
+                        if service_date > datetime.now():
+                            errors.append(f"Future date of service: {date_str}")
+                    except ValueError:
+                        errors.append(f"Invalid date format: {date_str}")
+                        
+        except Exception as e:
+            errors.append(f"Error processing date: {date_str} - {str(e)}")
     
     # 3. Check total charge matches sum of line items
     total_line_charges = sum(item['charge_amount'] for item in line_items)
@@ -89,8 +152,9 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
 
 def process_validation():
     """Process all ProviderBill records that need validation."""
-    db_path = PROJECT_ROOT / 'monolith.db'
+    db_path = DB_ROOT / 'monolith.db'
     conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Set row factory to return rows as dictionaries
     cursor = conn.cursor()
     
     try:
@@ -103,7 +167,8 @@ def process_validation():
         
         logger.info(f"Found {len(bills)} bills to validate")
         
-        for (bill_id,) in bills:
+        for bill in bills:  # Changed from (bill_id,) to bill since we're using Row factory
+            bill_id = bill['id']  # Access the id field using dictionary syntax
             logger.info(f"Validating bill {bill_id}")
             
             # Perform validation

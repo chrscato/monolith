@@ -1,0 +1,4 @@
+2025-05-15 11:19:53,261 - INFO - Starting import from C:\Users\ChristopherCato\Downloads\ordersexport20250515.csv to C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db
+2025-05-15 11:21:39,231 - INFO - Orders inserted: 108, updated: 2004
+2025-05-15 11:21:39,232 - INFO - Line items inserted: 2185, updated: 2186
+2025-05-15 11:21:39,237 - INFO - ✅ Import complete

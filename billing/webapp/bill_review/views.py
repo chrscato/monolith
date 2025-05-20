@@ -15,11 +15,11 @@ from django.views.decorators.http import require_GET
 
 logger = logging.getLogger(__name__)
 
-def get_flagged_bills():
+def get_flagged_bills(failure_category=None):
     """Get all flagged bills."""
     try:
         with connection.cursor() as cursor:
-            cursor.execute("""
+            query = """
                 SELECT 
                     pb.id,
                     pb.claim_id,
@@ -33,8 +33,16 @@ def get_flagged_bills():
                 LEFT JOIN orders o ON pb.claim_id = o.Order_ID
                 LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
                 WHERE pb.status IN ('FLAGGED', 'REVIEW_FLAG')
-                ORDER BY pb.created_at DESC
-            """)
+            """
+            params = []
+            
+            if failure_category:
+                query += " AND pb.action = %s"
+                params.append(failure_category)
+                
+            query += " ORDER BY pb.created_at DESC"
+            
+            cursor.execute(query, params)
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
     except Exception as e:
@@ -243,17 +251,182 @@ def update_bill_status(bill_id, status, action, last_error):
         logger.error(f"Error updating bill status for {bill_id}: {e}")
         return False
 
+def get_failure_categories():
+    """Get all failure categories."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, name, code, severity, description
+                FROM failure_categories
+                ORDER BY severity DESC, name ASC
+            """)
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"Error retrieving failure categories: {e}")
+        return []
+
+def get_status_distribution():
+    """Get distribution of bill statuses."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    status,
+                    COUNT(*) as count,
+                    MIN(created_at) as first_occurrence,
+                    MAX(created_at) as last_occurrence
+                FROM ProviderBill
+                WHERE status IS NOT NULL
+                GROUP BY status
+                ORDER BY count DESC
+            """)
+            statuses = []
+            for row in cursor.fetchall():
+                status = row[0] or 'No Status'  # Convert None to 'No Status'
+                color = 'secondary'  # default color
+                if status == 'FLAGGED':
+                    color = 'warning'
+                elif status == 'ERROR':
+                    color = 'danger'
+                elif status == 'REVIEWED':
+                    color = 'success'
+                elif status == 'MAPPED':
+                    color = 'info'
+                
+                statuses.append({
+                    'status': status,
+                    'count': row[1],
+                    'first_occurrence': row[2] or '',  # Convert None to empty string
+                    'last_occurrence': row[3] or '',   # Convert None to empty string
+                    'color': color,
+                    'description': f'Bills with status {status}'
+                })
+            return statuses
+    except Exception as e:
+        logger.error(f"Error retrieving status distribution: {e}")
+        return []
+
+def get_action_distribution():
+    """Get distribution of bill actions."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    action,
+                    COUNT(*) as count,
+                    MIN(created_at) as first_occurrence,
+                    MAX(created_at) as last_occurrence
+                FROM ProviderBill
+                WHERE action IS NOT NULL
+                GROUP BY action
+                ORDER BY count DESC
+            """)
+            actions = []
+            for row in cursor.fetchall():
+                actions.append({
+                    'action': row[0] or 'No Action',  # Convert None to 'No Action'
+                    'count': row[1],
+                    'first_occurrence': row[2] or '',  # Convert None to empty string
+                    'last_occurrence': row[3] or ''    # Convert None to empty string
+                })
+            return actions
+    except Exception as e:
+        logger.error(f"Error retrieving action distribution: {e}")
+        return []
+
+def get_filtered_bills(status=None, action=None):
+    """Get bills filtered by status and/or action."""
+    try:
+        with connection.cursor() as cursor:
+            query = """
+                SELECT 
+                    pb.id,
+                    pb.claim_id,
+                    pb.patient_name,
+                    pb.status,
+                    pb.action,
+                    pb.last_error,
+                    pb.created_at,
+                    p."DBA Name Billing Name" as provider_name
+                FROM ProviderBill pb
+                LEFT JOIN orders o ON pb.claim_id = o.Order_ID
+                LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
+                WHERE 1=1
+            """
+            params = []
+            
+            if status:
+                query += " AND pb.status = %s"
+                params.append(status)
+            
+            if action:
+                query += " AND pb.action = %s"
+                params.append(action)
+                
+            query += " ORDER BY pb.created_at DESC"
+            
+            cursor.execute(query, params)
+            columns = [col[0] for col in cursor.description]
+            bills = []
+            for row in cursor.fetchall():
+                bill = dict(zip(columns, row))
+                # Convert None values to empty strings or appropriate defaults
+                bill['status'] = bill['status'] or 'No Status'
+                bill['action'] = bill['action'] or 'No Action'
+                bill['last_error'] = bill['last_error'] or ''
+                bill['provider_name'] = bill['provider_name'] or 'Unknown Provider'
+                bills.append(bill)
+            return bills
+    except Exception as e:
+        logger.error(f"Error retrieving filtered bills: {e}")
+        return []
+
 def dashboard(request):
-    """Display bills by their status category."""
-    flagged_bills = get_flagged_bills()
-    error_bills = get_error_bills()
-    arthrogram_bills = get_arthrogram_bills()
-    
-    return render(request, 'bill_review/dashboard.html', {
-        'flagged_bills': flagged_bills,
-        'error_bills': error_bills,
-        'arthrogram_bills': arthrogram_bills,
-    })
+    """View for the bill review dashboard."""
+    try:
+        # Get filter parameters
+        status = request.GET.get('status')
+        action = request.GET.get('action')
+        
+        # Get filtered bills
+        bills = get_filtered_bills(status, action)
+        
+        # Get status and action distributions
+        status_distribution = get_status_distribution()
+        action_distribution = get_action_distribution()
+        
+        # Get unique statuses and actions for filter dropdowns
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT status 
+                FROM ProviderBill 
+                WHERE status IS NOT NULL 
+                ORDER BY status
+            """)
+            statuses = [row[0] for row in cursor.fetchall()]
+            
+            cursor.execute("""
+                SELECT DISTINCT action 
+                FROM ProviderBill 
+                WHERE action IS NOT NULL 
+                ORDER BY action
+            """)
+            actions = [row[0] for row in cursor.fetchall()]
+        
+        context = {
+            'bills': bills,
+            'status_distribution': status_distribution,
+            'action_distribution': action_distribution,
+            'statuses': statuses,
+            'actions': actions,
+        }
+        
+        return render(request, 'bill_review/dashboard.html', context)
+    except Exception as e:
+        logger.error(f"Error in dashboard view: {e}")
+        messages.error(request, "An error occurred while loading the dashboard.")
+        return render(request, 'bill_review/dashboard.html', {})
 
 def bill_detail(request, bill_id):
     """Show comprehensive details for a bill with all data needed for manual review."""
@@ -546,7 +719,7 @@ def bill_detail(request, bill_id):
         messages.error(request, f"Error retrieving bill details: {str(e)}")
         return redirect('bill_review:dashboard')
 
-def line_item_update(request, item_id):
+def line_item_update(request, line_item_id):
     """Update a specific line item."""
     if request.method == 'POST':
         form = LineItemUpdateForm(request.POST)
@@ -558,7 +731,7 @@ def line_item_update(request, item_id):
                         SELECT provider_bill_id 
                         FROM BillLineItem 
                         WHERE id = %s
-                    """, [item_id])
+                    """, [line_item_id])
                     row = cursor.fetchone()
                     if not row:
                         messages.error(request, 'Line item not found.')
@@ -585,13 +758,13 @@ def line_item_update(request, item_id):
                         form.cleaned_data['allowed_amount'],
                         form.cleaned_data['decision'],
                         form.cleaned_data['reason_code'],
-                        item_id
+                        line_item_id
                     ])
                 
                 messages.success(request, 'Line item updated successfully.')
                 return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
             except Exception as e:
-                logger.error(f"Error updating line item {item_id}: {e}")
+                logger.error(f"Error updating line item {line_item_id}: {e}")
                 messages.error(request, 'Failed to update line item.')
     
     return HttpResponseRedirect(reverse('bill_review:dashboard'))
@@ -708,39 +881,77 @@ def view_bill_pdf(request, bill_id):
             region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-2')
         )
         
-        # Define S3 bucket and path
+        # Define S3 bucket
         bucket_name = os.environ.get('S3_BUCKET', 'bill-review-prod')
-        pdf_key = f'data/hcfa_pdf/archived/{bill_id}.pdf'
-        alternative_key = f'data/hcfa_pdf/{bill_id}.pdf'
         
-        # Try to generate URL for primary location first
-        try:
-            url = s3_client.generate_presigned_url(
-                'get_object',
-                Params={
-                    'Bucket': bucket_name,
-                    'Key': pdf_key,
-                    'ResponseContentType': 'application/pdf'
-                },
-                ExpiresIn=3600  # URL expires in 1 hour
-            )
-            return HttpResponseRedirect(url)
-        except ClientError:
-            # If primary location fails, try alternative location
+        # Get the order_id for this bill
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT claim_id FROM ProviderBill WHERE id = %s
+            """, [bill_id])
+            row = cursor.fetchone()
+            order_id = row[0] if row else None
+        
+        # Define possible PDF paths to check
+        possible_paths = [
+            f'data/hcfa_pdf/archived/{bill_id}.pdf',  # Using providerbill_id in archived
+            f'data/hcfa_pdf/{bill_id}.pdf',          # Using providerbill_id in root
+            f'data/ProviderBills/pdf/archive/{bill_id}.pdf',  # Using providerbill_id in new archive
+        ]
+        
+        # Add order_id paths if we have an order_id
+        if order_id:
+            possible_paths.extend([
+                f'data/hcfa_pdf/archived/{order_id}.pdf',  # Using order_id in archived
+                f'data/hcfa_pdf/{order_id}.pdf',          # Using order_id in root
+                f'data/ProviderBills/pdf/archive/{order_id}.pdf',  # Using order_id in new archive
+            ])
+        
+        # Log the paths we're going to try
+        logger.info(f"Attempting to find PDF for bill {bill_id} in the following paths:")
+        for path in possible_paths:
+            logger.info(f"Checking path: {path}")
+        
+        # Try each possible path
+        for pdf_key in possible_paths:
             try:
+                # First verify the object exists
+                try:
+                    s3_client.head_object(Bucket=bucket_name, Key=pdf_key)
+                    logger.info(f"Found PDF at path: {pdf_key}")
+                except ClientError as e:
+                    error_code = e.response['Error']['Code']
+                    if error_code == '404':
+                        logger.info(f"PDF not found at path: {pdf_key}")
+                        continue
+                    else:
+                        logger.error(f"Error checking path {pdf_key}: {str(e)}")
+                        continue
+
+                # Generate pre-signed URL
                 url = s3_client.generate_presigned_url(
                     'get_object',
                     Params={
                         'Bucket': bucket_name,
-                        'Key': alternative_key,
+                        'Key': pdf_key,
                         'ResponseContentType': 'application/pdf'
                     },
                     ExpiresIn=3600  # URL expires in 1 hour
                 )
+                logger.info(f"Successfully generated pre-signed URL for path: {pdf_key}")
                 return HttpResponseRedirect(url)
             except ClientError as e:
-                logger.error(f"Failed to generate pre-signed URL for bill {bill_id}: {str(e)}")
-                raise Http404(f"PDF for bill {bill_id} not found in S3 bucket {bucket_name}")
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error']['Message']
+                logger.error(f"Error generating URL for {pdf_key}: {error_code} - {error_message}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error for {pdf_key}: {str(e)}")
+                continue
+        
+        # If we get here, none of the paths worked
+        logger.error(f"Failed to find PDF for bill {bill_id} in any location")
+        raise Http404(f"PDF for bill {bill_id} not found in S3 bucket {bucket_name}")
         
     except Exception as e:
         logger.exception(f"Error generating pre-signed URL for bill {bill_id}: {str(e)}")

@@ -11,15 +11,16 @@ import sys
 import logging
 import tempfile
 import uuid
+import shutil
 from datetime import datetime
 from pathlib import Path
 from PyPDF2 import PdfReader, PdfWriter
 from dotenv import load_dotenv
 import sqlite3
 
-# Get the project root directory
-project_root = Path(__file__).resolve().parents[2]
-sys.path.append(str(project_root))
+# Get the project root directory (4 levels up from this file)
+project_root = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(project_root))  # Add project root to Python path
 
 # Load environment variables from .env
 load_dotenv(project_root / '.env')
@@ -28,13 +29,25 @@ load_dotenv(project_root / '.env')
 from config.s3_utils import upload
 
 # Constants
-INPUT_DIR = project_root / 'billing' / 'data' / 'billbatch'
+INPUT_DIR = project_root / 'billing' / 'data' / 'billbatch'  # Fixed path
+ARCHIVE_DIR = INPUT_DIR / 'archive'
 OUTPUT_PREFIX = 'data/ProviderBills/pdf/'
 S3_BUCKET = os.getenv('S3_BUCKET', 'bill-review-prod')
 
+# Get the absolute path to the monolith root directory
+DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+
+def ensure_directories():
+    """Ensure input and archive directories exist."""
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("Split HCFA")
+    logger.info(f"Input directory: {INPUT_DIR}")
+    logger.info(f"Archive directory: {ARCHIVE_DIR}")
+
 def create_provider_bill_entry(source_file: str) -> str:
     """Create a new entry in the ProviderBill table and return its ID."""
-    db_path = project_root / 'monolith.db'
+    db_path = DB_ROOT / 'monolith.db'
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -92,6 +105,11 @@ def split_and_upload(pdf_path: Path):
             # Clean up local page file
             local_out.unlink()
 
+        # After successful processing, move the batch file to archive
+        archive_path = ARCHIVE_DIR / pdf_path.name
+        shutil.move(str(pdf_path), str(archive_path))
+        logger.info(f"Moved {pdf_path.name} to archive")
+
     except Exception as e:
         logger.error(f"Error processing {pdf_path}: {str(e)}", exc_info=True)
         raise
@@ -100,10 +118,8 @@ def process_batch_files():
     """Process all batch PDFs in the input directory."""
     logger = logging.getLogger("Split HCFA")
     try:
-        # Ensure input directory exists
-        if not INPUT_DIR.exists():
-            logger.error(f"Input directory {INPUT_DIR} does not exist")
-            return
+        # Ensure directories exist
+        ensure_directories()
 
         # Get all PDF files in the input directory
         pdf_files = list(INPUT_DIR.glob('*.pdf'))
