@@ -791,23 +791,9 @@ def reset_bill(request, bill_id):
 def update_provider(request, provider_id, bill_id):
     if request.method == 'POST':
         try:
-            # Log the incoming request data
-            print(f"DEBUG: Updating provider {provider_id} for bill {bill_id}")
-            print(f"DEBUG: POST data: {dict(request.POST)}")
-            
             with connection.cursor() as cursor:
-                # First verify the bill exists
-                cursor.execute("SELECT id FROM ProviderBill WHERE id = %s", [bill_id])
-                bill_exists = cursor.fetchone()
-                print(f"DEBUG: Bill exists check: {bill_exists}")
-                
-                if not bill_exists:
-                    print(f"ERROR: Bill {bill_id} not found")
-                    messages.error(request, 'Bill not found.')
-                    return redirect('bill_review:bill_detail', bill_id=bill_id)
-                
                 # Update provider information
-                provider_update_sql = """
+                cursor.execute("""
                     UPDATE providers 
                     SET "DBA Name Billing Name" = %s,
                         "Billing Name" = %s,
@@ -827,8 +813,7 @@ def update_provider(request, provider_id, bill_id):
                         Phone = %s,
                         "Fax Number" = %s
                     WHERE PrimaryKey = %s
-                """
-                provider_params = [
+                """, [
                     request.POST.get('dba_name'),
                     request.POST.get('billing_name'),
                     request.POST.get('address1'),
@@ -847,27 +832,16 @@ def update_provider(request, provider_id, bill_id):
                     request.POST.get('phone'),
                     request.POST.get('fax'),
                     provider_id
-                ]
-                
-                print(f"DEBUG: Provider update SQL: {provider_update_sql}")
-                print(f"DEBUG: Provider update params: {provider_params}")
-                
-                cursor.execute(provider_update_sql, provider_params)
-                print(f"DEBUG: Provider update rows affected: {cursor.rowcount}")
+                ])
                 
                 # Reset the bill status to MAPPED and clear action
-                bill_update_sql = """
+                cursor.execute("""
                     UPDATE ProviderBill
                     SET status = 'MAPPED',
                         action = NULL,
                         last_error = NULL
                     WHERE id = %s
-                """
-                print(f"DEBUG: Bill update SQL: {bill_update_sql}")
-                print(f"DEBUG: Bill update param: {bill_id}")
-                
-                cursor.execute(bill_update_sql, [bill_id])
-                print(f"DEBUG: Bill update rows affected: {cursor.rowcount}")
+                """, [bill_id])
                 
                 messages.success(request, 'Provider information updated and bill reset to MAPPED status.')
         except Exception as e:
@@ -877,8 +851,8 @@ def update_provider(request, provider_id, bill_id):
             print(f"ERROR: Traceback: {traceback.format_exc()}")
             messages.error(request, 'Failed to update provider information.')
     
-    # Redirect back to the bill detail page
-    return redirect('bill_review:bill_detail', bill_id=bill_id)
+    # Redirect to dashboard with update_prov_info filter
+    return redirect('bill_review:dashboard')
 
 @login_required
 def update_bill(request, bill_id):
