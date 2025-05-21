@@ -833,7 +833,19 @@ def update_provider(request, provider_id):
                     provider_id
                 ])
                 
-                messages.success(request, 'Provider information updated successfully.')
+                # Get the bill_id from the request
+                bill_id = request.GET.get('bill_id')
+                if bill_id:
+                    # Reset the bill status to MAPPED and clear action
+                    cursor.execute("""
+                        UPDATE ProviderBill
+                        SET status = 'MAPPED',
+                            action = NULL,
+                            last_error = NULL
+                        WHERE id = %s
+                    """, [bill_id])
+                
+                messages.success(request, 'Provider information updated and bill reset to MAPPED status.')
         except Exception as e:
             logger.error(f"Error updating provider {provider_id}: {str(e)}")
             messages.error(request, 'Failed to update provider information.')
@@ -956,3 +968,35 @@ def view_bill_pdf(request, bill_id):
     except Exception as e:
         logger.exception(f"Error generating pre-signed URL for bill {bill_id}: {str(e)}")
         raise Http404(f"Error retrieving PDF: {str(e)}")
+
+def line_item_delete(request, line_item_id):
+    """Delete a specific line item."""
+    if request.method == 'POST':
+        try:
+            with connection.cursor() as cursor:
+                # Get the bill_id for redirect
+                cursor.execute("""
+                    SELECT provider_bill_id 
+                    FROM BillLineItem 
+                    WHERE id = %s
+                """, [line_item_id])
+                row = cursor.fetchone()
+                if not row:
+                    messages.error(request, 'Line item not found.')
+                    return HttpResponseRedirect(reverse('bill_review:dashboard'))
+                
+                bill_id = row[0]
+                
+                # Delete the line item
+                cursor.execute("""
+                    DELETE FROM BillLineItem
+                    WHERE id = %s
+                """, [line_item_id])
+            
+            messages.success(request, 'Line item deleted successfully.')
+            return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
+        except Exception as e:
+            logger.error(f"Error deleting line item {line_item_id}: {e}")
+            messages.error(request, 'Failed to delete line item.')
+    
+    return HttpResponseRedirect(reverse('bill_review:dashboard'))

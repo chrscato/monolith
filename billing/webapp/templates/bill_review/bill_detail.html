@@ -226,19 +226,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <h5 class="mb-3">Practice Information</h5>
                                 <div class="mb-3">
                                     <label class="form-label">DBA Name / Billing Name</label>
-                                    <input type="text" name="dba_name" class="form-control" value="{{ provider.DBA_Name_Billing_Name }}">
+                                    <input type="text" name="dba_name" class="form-control" value="{{ provider.DBA_Name_Billing_Name|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">TIN</label>
-                                    <input type="text" name="tin" class="form-control" value="{{ provider.TIN }}">
+                                    <input type="text" name="tin" class="form-control" value="{{ provider.TIN|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">NPI</label>
-                                    <input type="text" name="npi" class="form-control" value="{{ provider.NPI }}">
+                                    <input type="text" name="npi" class="form-control" value="{{ provider.NPI|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Provider Network</label>
-                                    <input type="text" name="network" class="form-control" value="{{ provider.Provider_Network }}">
+                                    <input type="text" name="network" class="form-control" value="{{ provider.Provider_Network|default:'' }}">
                                 </div>
                             </div>
 
@@ -247,23 +247,23 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <h5 class="mb-3">Practice Address</h5>
                                 <div class="mb-3">
                                     <label class="form-label">Address Line 1</label>
-                                    <input type="text" name="address1" class="form-control" value="{{ provider.Address_Line_1 }}">
+                                    <input type="text" name="address1" class="form-control" value="{{ provider.Address_Line_1|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Address Line 2</label>
-                                    <input type="text" name="address2" class="form-control" value="{{ provider.Address_Line_2 }}">
+                                    <input type="text" name="address2" class="form-control" value="{{ provider.Address_Line_2|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">City</label>
-                                    <input type="text" name="city" class="form-control" value="{{ provider.City }}">
+                                    <input type="text" name="city" class="form-control" value="{{ provider.City|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">State</label>
-                                    <input type="text" name="state" class="form-control" value="{{ provider.State }}">
+                                    <input type="text" name="state" class="form-control" value="{{ provider.State|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Postal Code</label>
-                                    <input type="text" name="postal_code" class="form-control" value="{{ provider.Postal_Code }}">
+                                    <input type="text" name="postal_code" class="form-control" value="{{ provider.Postal_Code|default:'' }}">
                                 </div>
                             </div>
 
@@ -272,27 +272,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <h5 class="mb-3">Billing Address</h5>
                                 <div class="mb-3">
                                     <label class="form-label">Billing Name</label>
-                                    <input type="text" name="billing_name" class="form-control" value="{{ provider.Billing_Name }}">
+                                    <input type="text" name="billing_name" class="form-control" value="{{ provider.Billing_Name|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Billing Address Line 1</label>
-                                    <input type="text" name="billing_address1" class="form-control" value="{{ provider.Billing_Address_1 }}">
+                                    <input type="text" name="billing_address1" class="form-control" value="{{ provider.Billing_Address_1|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Billing Address Line 2</label>
-                                    <input type="text" name="billing_address2" class="form-control" value="{{ provider.Billing_Address_2 }}">
+                                    <input type="text" name="billing_address2" class="form-control" value="{{ provider.Billing_Address_2|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Billing City</label>
-                                    <input type="text" name="billing_city" class="form-control" value="{{ provider.Billing_Address_City }}">
+                                    <input type="text" name="billing_city" class="form-control" value="{{ provider.Billing_Address_City|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Billing State</label>
-                                    <input type="text" name="billing_state" class="form-control" value="{{ provider.Billing_Address_State }}">
+                                    <input type="text" name="billing_state" class="form-control" value="{{ provider.Billing_Address_State|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Billing Postal Code</label>
-                                    <input type="text" name="billing_postal_code" class="form-control" value="{{ provider.Billing_Address_Postal_Code }}">
+                                    <input type="text" name="billing_postal_code" class="form-control" value="{{ provider.Billing_Address_Postal_Code|default:'' }}">
                                 </div>
                             </div>
 
@@ -301,13 +301,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <h5 class="mb-3">Contact Information</h5>
                                 <div class="mb-3">
                                     <label class="form-label">Phone</label>
-                                    <input type="text" name="phone" class="form-control" value="{{ provider.Phone }}">
+                                    <input type="text" name="phone" class="form-control" value="{{ provider.Phone|default:'' }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Fax Number</label>
-                                    <input type="text" name="fax" class="form-control" value="{{ provider.Fax_Number }}">
+                                    <input type="text" name="fax" class="form-control" value="{{ provider.Fax_Number|default:'' }}">
                                 </div>
                             </div>
+                        </div>
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle"></i> Updating provider information will reset this bill to MAPPED status for reprocessing.
                         </div>
                         <button type="submit" class="btn btn-primary mt-3">Update Provider</button>
                     </form>
@@ -428,9 +431,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             <td>{{ item.reason_code|default:"-" }}</td>
                             <td>{{ item.date_of_service|date:"Y-m-d" }}</td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
-                                    Edit
-                                </button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
+                                        Edit
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteLineItem{{ item.id }}">
+                                        Delete
+                                    </button>
+                                </div>
                             </td>
                         </tr>
 
@@ -483,6 +491,30 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <button type="submit" class="btn btn-primary">Save Changes</button>
                                         </div>
                                     </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Delete Line Item Modal -->
+                        <div class="modal fade" id="deleteLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Delete Line Item</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Are you sure you want to delete this line item?</p>
+                                        <p><strong>CPT Code:</strong> {{ item.cpt_code }}</p>
+                                        <p><strong>Charge Amount:</strong> ${{ item.charge_amount }}</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="post" action="{% url 'bill_review:line_item_delete' item.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
                         </div>
