@@ -1,7 +1,7 @@
+# monolith/referrals/webapp/referrals_portal/settings.py
 """
-Django settings for intake_portal project.
+Django settings for referrals_portal project.
 """
-
 import os
 from pathlib import Path
 
@@ -24,10 +24,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'providers',
     'referrals',
-    'mail_ingest',
-    'ai_extraction',
+    'reviews',
+    'widget_tweaks',
 ]
 
 MIDDLEWARE = [
@@ -40,7 +39,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'intake_portal.urls'
+ROOT_URLCONF = 'referrals_portal.urls'
 
 TEMPLATES = [
     {
@@ -58,13 +57,13 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'intake_portal.wsgi.application'
+WSGI_APPLICATION = 'referrals_portal.wsgi.application'
 
-# Database
+# Database - using SQLite initially
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR.parent / 'referrals.db',
     }
 }
 
@@ -92,7 +91,22 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField' 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# S3 Settings for file access
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+AWS_S3_REGION_NAME = os.environ.get('AWS_REGION', 'us-east-1')
+AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
+}

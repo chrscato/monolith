@@ -1,0 +1,302 @@
+<!-- monolith/referrals/webapp/templates/referrals/referral_detail.html -->
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block title %}Referral Details - Referrals Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preview-iframe {
+        width: 100%;
+        height: 600px;
+        border: 1px solid #dee2e6;
+    }
+    .file-card {
+        transition: transform 0.2s;
+    }
+    .file-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .file-icon {
+        font-size: 2.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-1">Referral #{{ referral.id }}</h1>
+            <p class="text-muted mb-0">
+                <span class="badge {% if referral.status == 'new' %}bg-primary{% elif referral.status == 'processing' %}bg-warning{% elif referral.status == 'reviewed' %}bg-success{% elif referral.status == 'completed' %}bg-secondary{% endif %}">
+                    {{ referral.status }}
+                </span>
+                Received: {{ referral.received_date|date:"F d, Y H:i" }}
+            </p>
+        </div>
+        <div>
+            <a href="{% url 'referrals:referral_list' %}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Back to List
+            </a>
+            {% if referral.status == 'reviewed' %}
+            <form method="post" action="{% url 'referrals:mark_complete' referral.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to mark this referral as complete?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle"></i> Mark Complete
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Referral Information Column -->
+        <div class="col-lg-6 mb-4">
+            <!-- Email Information Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Email Information</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">Subject</dt>
+                        <dd class="col-sm-9">{{ referral.subject }}</dd>
+
+                        <dt class="col-sm-3">Sender</dt>
+                        <dd class="col-sm-9">{{ referral.sender }}</dd>
+
+                        <dt class="col-sm-3">Received</dt>
+                        <dd class="col-sm-9">{{ referral.received_date|date:"F d, Y H:i" }}</dd>
+
+                        <dt class="col-sm-3">Status</dt>
+                        <dd class="col-sm-9">
+                            <span class="badge {% if referral.status == 'new' %}bg-primary{% elif referral.status == 'processing' %}bg-warning{% elif referral.status == 'reviewed' %}bg-success{% elif referral.status == 'completed' %}bg-secondary{% endif %}">
+                                {{ referral.status }}
+                            </span>
+                        </dd>
+
+                        <dt class="col-sm-3">Email Body</dt>
+                        <dd class="col-sm-9">
+                            <p class="text-muted">{{ referral.body_text|linebreaksbr }}</p>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Attachments Card -->
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Attachments</h5>
+                </div>
+                <div class="card-body">
+                    {% if attachments %}
+                    <div class="row">
+                        {% for attachment in attachments %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card file-card h-100">
+                                <div class="card-body text-center">
+                                    {% if attachment.content_type == 'application/pdf' %}
+                                    <i class="bi bi-file-pdf file-icon text-danger"></i>
+                                    {% elif attachment.content_type == 'application/msword' or attachment.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' %}
+                                    <i class="bi bi-file-word file-icon text-primary"></i>
+                                    {% elif attachment.content_type == 'image/jpeg' or attachment.content_type == 'image/png' %}
+                                    <i class="bi bi-file-image file-icon text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-file-earmark file-icon text-secondary"></i>
+                                    {% endif %}
+                                    <h6 class="mt-2">{{ attachment.filename|truncatechars:20 }}</h6>
+                                    <p class="text-muted small mb-2">
+                                        {{ attachment.content_type }} - 
+                                        {% if attachment.size < 1024 %}
+                                            {{ attachment.size }} bytes
+                                        {% elif attachment.size < 1048576 %}
+                                            {{ attachment.size|divisibleby:1024|floatformat:1 }} KB
+                                        {% else %}
+                                            {{ attachment.size|divisibleby:1048576|floatformat:1 }} MB
+                                        {% endif %}
+                                    </p>
+                                    {% if attachment.presigned_url %}
+                                    <div class="btn-group w-100">
+                                        <a href="{{ attachment.presigned_url }}" class="btn btn-sm btn-primary" target="_blank">
+                                            <i class="bi bi-download"></i> Download
+                                        </a>
+                                        {% if attachment.can_preview %}
+                                        <button type="button" class="btn btn-sm btn-secondary" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#previewModal{{ attachment.id }}">
+                                            <i class="bi bi-eye"></i> Preview
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-secondary disabled">Not Available</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if attachment.can_preview %}
+                        <!-- Preview Modal -->
+                        <div class="modal fade" id="previewModal{{ attachment.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-xl">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">{{ attachment.filename }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body p-0">
+                                        <iframe src="{{ attachment.presigned_url }}" class="preview-iframe"></iframe>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <a href="{{ attachment.presigned_url }}" class="btn btn-primary" target="_blank">
+                                            <i class="bi bi-download"></i> Download
+                                        </a>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        No attachments available for this referral.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Extracted Data Column -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">Patient Information</h5>
+                        {% if extracted_data %}
+                        <span class="badge {% if extracted_data.status == 'extracted' %}bg-warning{% elif extracted_data.status == 'verified' %}bg-success{% elif extracted_data.status == 'invalid' %}bg-danger{% endif %}">
+                            {{ extracted_data.status }}
+                        </span>
+                        {% else %}
+                        <span class="badge bg-secondary">Not Extracted</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'referrals:referral_detail' referral.id %}">
+                        {% csrf_token %}
+
+                        <!-- Personal Information -->
+                        <h6 class="mb-3">Personal Information</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.patient_first_name.id_for_label }}" class="form-label">First Name</label>
+                                {{ form.patient_first_name|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.patient_last_name.id_for_label }}" class="form-label">Last Name</label>
+                                {{ form.patient_last_name|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.patient_dob.id_for_label }}" class="form-label">Date of Birth</label>
+                                {{ form.patient_dob|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.patient_phone.id_for_label }}" class="form-label">Phone Number</label>
+                                {{ form.patient_phone|add_class:"form-control" }}
+                            </div>
+                        </div>
+
+                        <!-- Address Information -->
+                        <h6 class="mb-3">Address Information</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <label for="{{ form.patient_address.id_for_label }}" class="form-label">Street Address</label>
+                                {{ form.patient_address|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-5">
+                                <label for="{{ form.patient_city.id_for_label }}" class="form-label">City</label>
+                                {{ form.patient_city|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ form.patient_state.id_for_label }}" class="form-label">State</label>
+                                {{ form.patient_state|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.patient_zip.id_for_label }}" class="form-label">ZIP Code</label>
+                                {{ form.patient_zip|add_class:"form-control" }}
+                            </div>
+                        </div>
+
+                        <!-- Insurance Information -->
+                        <h6 class="mb-3">Insurance Information</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-8">
+                                <label for="{{ form.insurance_provider.id_for_label }}" class="form-label">Insurance Provider</label>
+                                {{ form.insurance_provider|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.insurance_id.id_for_label }}" class="form-label">Insurance ID</label>
+                                {{ form.insurance_id|add_class:"form-control" }}
+                            </div>
+                        </div>
+
+                        <!-- Referring Provider Information -->
+                        <h6 class="mb-3">Referring Provider</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-8">
+                                <label for="{{ form.referring_physician.id_for_label }}" class="form-label">Physician Name</label>
+                                {{ form.referring_physician|add_class:"form-control" }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.physician_npi.id_for_label }}" class="form-label">NPI</label>
+                                {{ form.physician_npi|add_class:"form-control" }}
+                            </div>
+                        </div>
+
+                        <!-- Service Information -->
+                        <h6 class="mb-3">Service Information</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <label for="{{ form.service_requested.id_for_label }}" class="form-label">Service Requested</label>
+                                {{ form.service_requested|add_class:"form-control" }}
+                            </div>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.status.id_for_label }}" class="form-label">Status</label>
+                                {{ form.status|add_class:"form-select" }}
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-resize textareas
+    document.addEventListener('DOMContentLoaded', function() {
+        const textareas = document.querySelectorAll('textarea');
+        textareas.forEach(function(textarea) {
+            textarea.style.height = textarea.scrollHeight + 'px';
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = this.scrollHeight + 'px';
+            });
+        });
+    });
+</script>
+{% endblock %}

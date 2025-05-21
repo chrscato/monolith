@@ -1,0 +1,106 @@
+<!-- monolith/referrals/webapp/templates/referrals/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Referrals Portal{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">Dashboard</h1>
+
+    <!-- Stats Cards Row -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-envelope-fill fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title">New Referrals</h5>
+                            <h2 class="card-text">{{ new_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-primary border-top-0">
+                    <a href="{% url 'referrals:referral_list' %}?status=new" class="text-white text-decoration-none">
+                        View Details <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-gear-fill fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title">Processing</h5>
+                            <h2 class="card-text">{{ processing_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-warning border-top-0">
+                    <a href="{% url 'referrals:referral_list' %}?status=processing" class="text-dark text-decoration-none">
+                        View Details <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title">Reviewed</h5>
+                            <h2 class="card-text">{{ reviewed_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-success border-top-0">
+                    <a href="{% url 'referrals:referral_list' %}?status=reviewed" class="text-white text-decoration-none">
+                        View Details <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-archive-fill fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title">Completed</h5>
+                            <h2 class="card-text">{{ completed_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-secondary border-top-0">
+                    <a href="{% url 'referrals:referral_list' %}?status=completed" class="text-white text-decoration-none">
+                        View Details <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Pending Reviews Section -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">Pending Reviews</h5>
+                </div>
+                <div class="card-body">
+                    {% if pending_reviews %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Subject</th>
+                                    <th>Received</th>
+                                    <th>Action</th>
+                                </tr>
