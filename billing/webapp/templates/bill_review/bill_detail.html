@@ -218,7 +218,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div id="providerInfo" class="accordion-collapse collapse" data-bs-parent="#billAccordion">
                 <div class="accordion-body">
                     {% if provider %}
-                    <form method="post" action="{% url 'bill_review:update_provider' provider.PrimaryKey %}">
+                    <form method="post" action="{% url 'bill_review:update_provider' provider.PrimaryKey bill.id %}">
                         {% csrf_token %}
                         <div class="row">
                             <!-- Practice Information -->

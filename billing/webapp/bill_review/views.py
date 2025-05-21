@@ -470,6 +470,8 @@ def bill_detail(request, bill_id):
                 return redirect('bill_review:dashboard')
                 
             bill = dict(zip(columns, bill_row))
+            print(f"DEBUG: Retrieved bill data: {bill}")
+            print(f"DEBUG: Bill status: {bill.get('status')}")
             
             # Extract provider data from bill
             provider = None
@@ -496,9 +498,15 @@ def bill_detail(request, bill_id):
                     'Phone': bill.get('provider_phone'),
                     'Fax_Number': bill.get('provider_fax')
                 }
-                # Debug log to see what provider data we're getting
-                logger.info(f"Provider data extracted for bill {bill_id}: {provider}")
-                logger.info(f"Raw bill data for provider fields: {bill}")
+                print(f"DEBUG: Provider data: {provider}")
+            
+            # Initialize form with current bill status
+            form = BillUpdateForm(initial={
+                'status': bill.get('status'),
+                'action': bill.get('action'),
+                'last_error': bill.get('last_error')
+            })
+            print(f"DEBUG: Form initial data: {form.initial}")
             
             # Get bill line items
             cursor.execute("""
@@ -686,13 +694,6 @@ def bill_detail(request, bill_id):
                         'line_id': item.get('id')
                     })
             
-            # Initialize form
-            form = BillUpdateForm(initial={
-                'status': bill.get('status'),
-                'action': bill.get('action'),
-                'last_error': bill.get('last_error')
-            })
-            
             # Prepare context for template
             context = {
                 'bill': bill,
@@ -787,12 +788,26 @@ def reset_bill(request, bill_id):
     return HttpResponseRedirect(reverse('bill_review:dashboard'))
 
 @login_required
-def update_provider(request, provider_id):
+def update_provider(request, provider_id, bill_id):
     if request.method == 'POST':
         try:
+            # Log the incoming request data
+            print(f"DEBUG: Updating provider {provider_id} for bill {bill_id}")
+            print(f"DEBUG: POST data: {dict(request.POST)}")
+            
             with connection.cursor() as cursor:
+                # First verify the bill exists
+                cursor.execute("SELECT id FROM ProviderBill WHERE id = %s", [bill_id])
+                bill_exists = cursor.fetchone()
+                print(f"DEBUG: Bill exists check: {bill_exists}")
+                
+                if not bill_exists:
+                    print(f"ERROR: Bill {bill_id} not found")
+                    messages.error(request, 'Bill not found.')
+                    return redirect('bill_review:bill_detail', bill_id=bill_id)
+                
                 # Update provider information
-                cursor.execute("""
+                provider_update_sql = """
                     UPDATE providers 
                     SET "DBA Name Billing Name" = %s,
                         "Billing Name" = %s,
@@ -812,7 +827,8 @@ def update_provider(request, provider_id):
                         Phone = %s,
                         "Fax Number" = %s
                     WHERE PrimaryKey = %s
-                """, [
+                """
+                provider_params = [
                     request.POST.get('dba_name'),
                     request.POST.get('billing_name'),
                     request.POST.get('address1'),
@@ -831,27 +847,38 @@ def update_provider(request, provider_id):
                     request.POST.get('phone'),
                     request.POST.get('fax'),
                     provider_id
-                ])
+                ]
                 
-                # Get the bill_id from the request
-                bill_id = request.GET.get('bill_id')
-                if bill_id:
-                    # Reset the bill status to MAPPED and clear action
-                    cursor.execute("""
-                        UPDATE ProviderBill
-                        SET status = 'MAPPED',
-                            action = NULL,
-                            last_error = NULL
-                        WHERE id = %s
-                    """, [bill_id])
+                print(f"DEBUG: Provider update SQL: {provider_update_sql}")
+                print(f"DEBUG: Provider update params: {provider_params}")
+                
+                cursor.execute(provider_update_sql, provider_params)
+                print(f"DEBUG: Provider update rows affected: {cursor.rowcount}")
+                
+                # Reset the bill status to MAPPED and clear action
+                bill_update_sql = """
+                    UPDATE ProviderBill
+                    SET status = 'MAPPED',
+                        action = NULL,
+                        last_error = NULL
+                    WHERE id = %s
+                """
+                print(f"DEBUG: Bill update SQL: {bill_update_sql}")
+                print(f"DEBUG: Bill update param: {bill_id}")
+                
+                cursor.execute(bill_update_sql, [bill_id])
+                print(f"DEBUG: Bill update rows affected: {cursor.rowcount}")
                 
                 messages.success(request, 'Provider information updated and bill reset to MAPPED status.')
         except Exception as e:
-            logger.error(f"Error updating provider {provider_id}: {str(e)}")
+            print(f"ERROR: Exception in update_provider: {str(e)}")
+            print(f"ERROR: Exception type: {type(e)}")
+            import traceback
+            print(f"ERROR: Traceback: {traceback.format_exc()}")
             messages.error(request, 'Failed to update provider information.')
     
     # Redirect back to the bill detail page
-    return redirect('bill_review:bill_detail', bill_id=request.GET.get('bill_id'))
+    return redirect('bill_review:bill_detail', bill_id=bill_id)
 
 @login_required
 def update_bill(request, bill_id):
