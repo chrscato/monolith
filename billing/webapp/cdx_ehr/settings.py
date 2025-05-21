@@ -34,7 +34,7 @@ LOGOUT_REDIRECT_URL = '/'
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.',
+    'django.contrib.admin',        # ✅ Corrected
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'bill_review',
     'widget_tweaks',
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
