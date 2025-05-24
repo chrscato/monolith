@@ -13,4 +13,6 @@ urlpatterns = [
     path('line-item/<str:line_item_id>/update/', views.line_item_update, name='line_item_update'),
     path('line-item/<str:line_item_id>/delete/', views.line_item_delete, name='line_item_delete'),
     path('provider/<str:provider_id>/update/<str:bill_id>/', views.update_provider, name='update_provider'),
+    path('bill/<str:bill_id>/line-item/<int:line_item_id>/add-ota-rate/', views.add_ota_rate, name='add_ota_rate'),
+    path('bill/<str:bill_id>/line-item/<int:line_item_id>/add-ppo-rate/', views.add_ppo_rate, name='add_ppo_rate'),
 ]

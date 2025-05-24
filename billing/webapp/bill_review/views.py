@@ -5,15 +5,135 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect, HttpResponse, Http404
 from django.contrib import messages
 import logging
-from .forms import BillUpdateForm, LineItemUpdateForm
+from .forms import BillUpdateForm, LineItemUpdateForm, OTARateForm, PPORateForm
 from django.contrib.auth.decorators import login_required
 import boto3
 import os
 import tempfile
 from botocore.exceptions import ClientError
 from django.views.decorators.http import require_GET
+import uuid
 
 logger = logging.getLogger(__name__)
+
+def add_ota_rate(request, bill_id, line_item_id):
+    """Add a new OTA rate for a line item."""
+    try:
+        # Get the line item details
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT bli.cpt_code, bli.modifier, pb.claim_id
+                FROM BillLineItem bli
+                JOIN ProviderBill pb ON bli.provider_bill_id = pb.id
+                WHERE bli.id = %s AND pb.id = %s
+            """, [line_item_id, bill_id])
+            row = cursor.fetchone()
+            if not row:
+                messages.error(request, "Line item not found")
+                return redirect('bill_review:bill_detail', bill_id=bill_id)
+            
+            cpt_code, modifier, claim_id = row
+
+        if request.method == 'POST':
+            form = OTARateForm(request.POST)
+            if form.is_valid():
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO current_otas (ID_Order_PrimaryKey, CPT, modifier, rate)
+                            VALUES (%s, %s, %s, %s)
+                        """, [claim_id, cpt_code, modifier, form.cleaned_data['rate']])
+                    messages.success(request, "OTA rate added successfully")
+                    return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
+                except Exception as e:
+                    logger.error(f"Error inserting OTA rate: {e}")
+                    messages.error(request, "Failed to add OTA rate")
+        else:
+            form = OTARateForm(initial={
+                'cpt_code': cpt_code,
+                'modifier': modifier
+            })
+
+        return render(request, 'bill_review/add_ota_rate.html', {
+            'form': form,
+            'bill_id': bill_id,
+            'line_item_id': line_item_id
+        })
+    except Exception as e:
+        logger.error(f"Error in add_ota_rate: {e}")
+        messages.error(request, "An error occurred while processing your request")
+        return redirect('bill_review:bill_detail', bill_id=bill_id)
+
+def add_ppo_rate(request, bill_id, line_item_id):
+    """Add a new PPO rate for a line item."""
+    try:
+        # Get the line item and provider details
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    bli.cpt_code, 
+                    bli.modifier,
+                    p.State as RenderingState,
+                    p.TIN,
+                    p."DBA Name Billing Name" as provider_name
+                FROM BillLineItem bli
+                JOIN ProviderBill pb ON bli.provider_bill_id = pb.id
+                JOIN orders o ON pb.claim_id = o.Order_ID
+                JOIN providers p ON o.provider_id = p.PrimaryKey
+                WHERE bli.id = %s AND pb.id = %s
+            """, [line_item_id, bill_id])
+            row = cursor.fetchone()
+            if not row:
+                messages.error(request, "Line item not found")
+                return redirect('bill_review:bill_detail', bill_id=bill_id)
+            
+            cpt_code, modifier, rendering_state, tin, provider_name = row
+
+        if request.method == 'POST':
+            form = PPORateForm(request.POST)
+            logger.info(f"Form data: {request.POST}")
+            if form.is_valid():
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO ppo (
+                                id, RenderingState, TIN, provider_name, 
+                                proc_cd, modifier, proc_desc, proc_category, rate
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, [
+                            str(uuid.uuid4()),
+                            rendering_state,
+                            tin,
+                            provider_name,
+                            cpt_code,
+                            modifier,
+                            form.cleaned_data['proc_desc'],
+                            form.cleaned_data['proc_category'],
+                            form.cleaned_data['rate']
+                        ])
+                    messages.success(request, "PPO rate added successfully")
+                    return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
+                except Exception as e:
+                    logger.error(f"Error inserting PPO rate: {e}")
+                    messages.error(request, "Failed to add PPO rate")
+            else:
+                logger.error(f"Form validation errors: {form.errors}")
+                messages.error(request, "Please correct the errors below.")
+        else:
+            form = PPORateForm(initial={
+                'cpt_code': cpt_code,
+                'modifier': modifier
+            })
+
+        return render(request, 'bill_review/add_ppo_rate.html', {
+            'form': form,
+            'bill_id': bill_id,
+            'line_item_id': line_item_id
+        })
+    except Exception as e:
+        logger.error(f"Error in add_ppo_rate: {e}")
+        messages.error(request, "An error occurred while processing your request")
+        return redirect('bill_review:bill_detail', bill_id=bill_id)
 
 def get_flagged_bills(failure_category=None):
     """Get all flagged bills."""
@@ -711,6 +831,7 @@ def bill_detail(request, bill_id):
                 'ordered_not_billed': ordered_not_billed,
                 'units_violations': units_violations,
                 'ancillary_codes': ancillary_codes,
+                'provider_network': provider.get('Provider_Network') if provider else None,
             }
             
             return render(request, 'bill_review/bill_detail.html', context)
@@ -881,7 +1002,6 @@ def update_bill(request, bill_id):
     
     return redirect('bill_review:bill_detail', bill_id=bill_id)
 
-@login_required
 @require_GET
 def view_bill_pdf(request, bill_id):
     """Generate a pre-signed URL for the bill PDF in S3."""

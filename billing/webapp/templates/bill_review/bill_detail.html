@@ -386,6 +386,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         </div>
+
+        <!-- Rate Correction -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#rateCorrection">
+                    Rate Correction
+                </button>
+            </h2>
+            <div id="rateCorrection" class="accordion-collapse collapse" data-bs-parent="#billAccordion">
+                <div class="accordion-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>CPT Code</th>
+                                    <th>Modifier</th>
+                                    <th>Current Charge</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in bill_items %}
+                                <tr>
+                                    <td>{{ item.cpt_code }}</td>
+                                    <td>{{ item.modifier|default:"-" }}</td>
+                                    <td>${{ item.charge_amount }}</td>
+                                    <td>
+                                        {% if provider_network == "Out of Network" %}
+                                            <a href="{% url 'bill_review:add_ota_rate' bill.id item.id %}" class="btn btn-sm btn-primary">Add OTA Rate</a>
+                                        {% elif provider_network == "In Network" %}
+                                            <a href="{% url 'bill_review:add_ppo_rate' bill.id item.id %}" class="btn btn-sm btn-primary">Add PPO Rate</a>
+                                        {% else %}
+                                            <span class="text-muted">Network status unknown</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Line Items -->

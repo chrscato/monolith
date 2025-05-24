@@ -39,3 +39,41 @@ class LineItemUpdateForm(forms.Form):
     allowed_amount = forms.DecimalField(max_digits=10, decimal_places=2, required=False)
     decision = forms.ChoiceField(choices=DECISION_CHOICES)
     reason_code = forms.CharField(max_length=20, required=False)
+
+class OTARateForm(forms.Form):
+    cpt_code = forms.CharField(
+        max_length=10,
+        widget=forms.TextInput(attrs={'readonly': 'readonly'})
+    )
+    modifier = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={'readonly': 'readonly'})
+    )
+    rate = forms.DecimalField(max_digits=10, decimal_places=2)
+
+class PPORateForm(forms.Form):
+    cpt_code = forms.CharField(
+        max_length=10,
+        widget=forms.TextInput(attrs={'readonly': 'readonly'})
+    )
+    modifier = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={'readonly': 'readonly'})
+    )
+    proc_desc = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+    proc_category = forms.CharField(
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+    rate = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={'class': 'form-control'})
+    )

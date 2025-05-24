@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">Add OTA Rate</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Read-only line item details -->
+                        <div class="mb-3">
+                            <label class="form-label">CPT Code</label>
+                            <input type="text" class="form-control" value="{{ form.cpt_code.value }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Modifier</label>
+                            <input type="text" class="form-control" value="{{ form.modifier.value|default:'-' }}" readonly>
+                        </div>
+
+                        <!-- Rate field -->
+                        <div class="mb-3">
+                            <label class="form-label">Rate</label>
+                            {{ form.rate|add_class:"form-control" }}
+                            {% if form.rate.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.rate.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'bill_review:bill_detail' bill_id %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Save Rate</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

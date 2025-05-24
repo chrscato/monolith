@@ -133,6 +133,32 @@ def process_bill(bill_id: str) -> Dict:
         cpt_validation = compare_cpt_codes(bill_items, order_items)
         ancillary_codes = load_ancillary_codes()
         
+        # Check for exact match overbilling
+        if cpt_validation['exact_match_overbilling']:
+            overbilling_details = []
+            for match in cpt_validation['exact_match_overbilling']:
+                overbilling_details.append(
+                    f"CPT {match['cpt']}: billed {match['billed_count']} > ordered {match['ordered_count']}"
+                )
+            error_msg = "Exact match overbilling detected: " + "; ".join(overbilling_details)
+            logger.warning(f"Bill {bill_id}: {error_msg}")
+            update_bill_status(bill_id, "FLAGGED", "exact_match_overbilling", error_msg)
+            return {"status": "FLAGGED", "message": error_msg}
+            
+        # Check for category overbilling
+        if cpt_validation['category_overbilling']:
+            overbilling_details = []
+            for match in cpt_validation['category_overbilling']:
+                overbilling_details.append(
+                    f"Category {match['category']}/{match['subcategory']}: "
+                    f"billed {match['billed_count']} > ordered {match['ordered_count']} "
+                    f"(CPTs: {', '.join(match['billed_cpts'])})"
+                )
+            error_msg = "Category overbilling detected: " + "; ".join(overbilling_details)
+            logger.warning(f"Bill {bill_id}: {error_msg}")
+            update_bill_status(bill_id, "FLAGGED", "category_overbilling", error_msg)
+            return {"status": "FLAGGED", "message": error_msg}
+        
         # Filter out ancillary codes from all matches
         non_ancillary_exact_matches = [
             match for match in cpt_validation['exact_matches']

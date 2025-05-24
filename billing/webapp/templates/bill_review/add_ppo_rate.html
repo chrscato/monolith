@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">Add PPO Rate</h2>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Hidden fields for required values -->
+                        <input type="hidden" name="cpt_code" value="{{ form.cpt_code.value }}">
+                        <input type="hidden" name="modifier" value="{{ form.modifier.value|default:'' }}">
+                        
+                        <!-- Read-only line item details -->
+                        <div class="mb-3">
+                            <label class="form-label">CPT Code</label>
+                            <input type="text" class="form-control" value="{{ form.cpt_code.value }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Modifier</label>
+                            <input type="text" class="form-control" value="{{ form.modifier.value|default:'-' }}" readonly>
+                        </div>
+
+                        <!-- Editable fields -->
+                        <div class="mb-3">
+                            <label class="form-label">Procedure Description</label>
+                            {{ form.proc_desc }}
+                            {% if form.proc_desc.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.proc_desc.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Procedure Category</label>
+                            {{ form.proc_category }}
+                            {% if form.proc_category.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.proc_category.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Rate</label>
+                            {{ form.rate }}
+                            {% if form.rate.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.rate.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'bill_review:bill_detail' bill_id %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Save Rate</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
