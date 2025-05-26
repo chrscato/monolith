@@ -72,6 +72,137 @@ class ClarityEmailFetcher:
         if not self.access_token:
             if not self.authenticate():
                 return None
+    
+    def filter_new_referrals(self, emails):
+        """Filter emails to identify new referrals vs replies/follow-ups."""
+        new_referrals = []
+        
+        # Group emails by conversation ID
+        conversations = {}
+        for email in emails:
+            conv_id = email.get('conversationId', email.get('id'))
+            if conv_id not in conversations:
+                conversations[conv_id] = []
+            conversations[conv_id].append(email)
+        
+        for conv_id, conv_emails in conversations.items():
+            # Sort by received date (oldest first)
+            conv_emails.sort(key=lambda x: x.get('receivedDateTime', ''))
+            
+            # Check if we already have this conversation in our database
+            if self.conversation_exists_in_db(conv_id):
+                logger.info(f"Conversation {conv_id} already exists in database, skipping")
+                continue
+            
+            # Find the first email that looks like a new referral
+            referral_email = self.identify_referral_email(conv_emails)
+            if referral_email:
+                new_referrals.append(referral_email)
+                logger.info(f"Identified new referral: {referral_email.get('subject', 'No Subject')[:50]}")
+            else:
+                logger.info(f"No clear referral found in conversation: {conv_id}")
+        
+        return new_referrals
+    
+    def conversation_exists_in_db(self, conversation_id):
+        """Check if we already have this conversation in our database."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM outlook_messages 
+                WHERE conversation_id = ?
+            """, (conversation_id,))
+            
+            count = cursor.fetchone()[0]
+            return count > 0
+            
+        except Exception as e:
+            logger.error(f"Error checking conversation existence: {str(e)}")
+            return False
+        finally:
+            conn.close()
+    
+    def identify_referral_email(self, conversation_emails):
+        """Identify which email in a conversation is the actual referral."""
+        
+        # Patterns that indicate a new referral
+        referral_indicators = [
+            'referral', 'authorization', 'pre-auth', 'approval', 'treatment',
+            'therapy', 'evaluation', 'examination', 'mri', 'ct scan', 'x-ray',
+            'physical therapy', 'occupational therapy', 'pt', 'ot',
+            'injured worker', 'workers comp', 'work comp', 'claim #',
+            'date of injury', 'doi', 'ime', 'fce'
+        ]
+        
+        # Patterns that indicate replies/follow-ups
+        reply_indicators = [
+            're:', 'fwd:', 'fw:', 'response', 'follow up', 'follow-up',
+            'thank you', 'thanks', 'received', 'confirmed', 'scheduled',
+            'appointment', 'appt', 'status update', 'completed'
+        ]
+        
+        # Auto-reply patterns
+        auto_reply_indicators = [
+            'automatic reply', 'auto-reply', 'out of office', 'ooo',
+            'delivery receipt', 'read receipt', 'undeliverable'
+        ]
+        
+        for email in conversation_emails:
+            subject = email.get('subject', '').lower()
+            sender = email.get('sender', {}).get('emailAddress', {}).get('address', '').lower()
+            body_preview = email.get('bodyPreview', '').lower()
+            
+            # Skip auto-replies
+            if any(indicator in subject or indicator in body_preview for indicator in auto_reply_indicators):
+                continue
+            
+            # Skip obvious replies (unless they contain strong referral indicators)
+            is_reply = any(indicator in subject for indicator in reply_indicators)
+            has_referral_content = any(indicator in subject or indicator in body_preview 
+                                     for indicator in referral_indicators)
+            
+            # Skip if it's clearly a reply without referral content
+            if is_reply and not has_referral_content:
+                continue
+            
+            # Check if sender is from external domain (likely referring provider)
+            # Internal emails are less likely to be new referrals
+            is_external = not sender.endswith('@clarity-dx.com')
+            
+            # Score this email as potential referral
+            referral_score = 0
+            
+            # Positive indicators
+            if has_referral_content:
+                referral_score += 3
+            if is_external:
+                referral_score += 2
+            if email.get('hasAttachments', False):
+                referral_score += 2
+            if not is_reply:
+                referral_score += 1
+            
+            # If this looks like a referral, return it
+            if referral_score >= 3:
+                logger.info(f"Email scored {referral_score} as potential referral: {subject[:50]}")
+                return email
+        
+        # If no clear referral found, return the first external email with attachments
+        for email in conversation_emails:
+            sender = email.get('sender', {}).get('emailAddress', {}).get('address', '').lower()
+            if (not sender.endswith('@clarity-dx.com') and 
+                email.get('hasAttachments', False)):
+                logger.info(f"Defaulting to first external email with attachments: {email.get('subject', '')[:50]}")
+                return email
+        
+        # Last resort: return the first email in the conversation
+        if conversation_emails:
+            logger.info(f"Defaulting to first email in conversation: {conversation_emails[0].get('subject', '')[:50]}")
+            return conversation_emails[0]
+        
+        return None
         
         # First get the Inbox folder
         endpoint = f"https://graph.microsoft.com/v1.0/users/{self.config['shared_mailbox']}/mailFolders"
@@ -120,7 +251,7 @@ class ClarityEmailFetcher:
         return None
     
     def get_unprocessed_emails(self, days=7, max_emails=50):
-        """Get unprocessed emails from the assigned folder."""
+        """Get unprocessed emails from the assigned folder, filtering for new referrals only."""
         if not self.access_token:
             if not self.authenticate():
                 return []
@@ -142,15 +273,19 @@ class ClarityEmailFetcher:
             '$top': max_emails,
             '$filter': f"receivedDateTime ge {date_filter}",
             '$orderby': 'receivedDateTime desc',
-            '$select': 'id,subject,sender,receivedDateTime,hasAttachments,bodyPreview,body'
+            '$select': 'id,subject,sender,receivedDateTime,hasAttachments,bodyPreview,body,conversationId,isReply,parentFolderId'
         }
         
         response = requests.get(endpoint, headers=headers, params=params)
         
         if response.status_code == 200:
-            emails = response.json().get('value', [])
-            logger.info(f"Found {len(emails)} emails in '{self.config['folder_name']}' folder")
-            return emails
+            all_emails = response.json().get('value', [])
+            
+            # Filter for new referrals only
+            new_referrals = self.filter_new_referrals(all_emails)
+            
+            logger.info(f"Found {len(all_emails)} total emails, {len(new_referrals)} appear to be new referrals")
+            return new_referrals
         else:
             logger.error(f"Error fetching emails: {response.status_code} - {response.text}")
             return []
@@ -250,12 +385,13 @@ class ClarityEmailFetcher:
             # Insert new email
             cursor.execute('''
                 INSERT INTO outlook_messages (
-                    message_id, subject, sender_email, sender_name, 
+                    message_id, conversation_id, subject, sender_email, sender_name, 
                     received_datetime, body_preview, body_content, 
                     has_attachments, processing_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 email_data['id'],
+                email_data.get('conversationId', ''),
                 email_data.get('subject', ''),
                 email_data.get('sender', {}).get('emailAddress', {}).get('address', ''),
                 email_data.get('sender', {}).get('emailAddress', {}).get('name', ''),
@@ -346,15 +482,36 @@ class ClarityEmailFetcher:
         logger.info("Email processing completed")
 
 if __name__ == "__main__":
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Fetch emails from assignment@clarity-dx.com')
+    parser.add_argument('--days', type=int, default=7, help='Days to look back (default: 7)')
+    parser.add_argument('--max-emails', type=int, default=20, help='Max emails to process (default: 20)')
+    parser.add_argument('--test-mode', action='store_true', help='Test mode - no S3 upload')
+    parser.add_argument('--dry-run', action='store_true', help='Dry run - no database writes')
+    
+    args = parser.parse_args()
+    
     # Load environment variables
     from dotenv import load_dotenv
     load_dotenv()
     
-    # Create database if it doesn't exist
-    if not Path('referrals_wc.db').exists():
-        from create_referrals_database import create_referrals_database
-        create_referrals_database()
+    # Create database if it doesn't exist (unless dry run)
+    if not args.dry_run and not Path('referrals_wc.db').exists():
+        print("Creating database...")
+        # You'll need to run the database creation script first
     
     # Process emails
     fetcher = ClarityEmailFetcher()
-    fetcher.process_emails(days=7, max_emails=20)
+    
+    if args.test_mode:
+        print("🧪 TEST MODE: S3 uploads disabled")
+        fetcher.test_mode = True
+    
+    if args.dry_run:
+        print("🔍 DRY RUN: No database writes")
+        fetcher.dry_run = True
+    
+    print(f"📧 Processing emails from last {args.days} days (max {args.max_emails})")
+    fetcher.process_emails(days=args.days, max_emails=args.max_emails)
