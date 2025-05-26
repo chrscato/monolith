@@ -166,3 +166,6 @@ venv.bak/
 *.orig
 *.log
 *.deploy.sh
+
+*.fetch_db.sh
+*.update_db.sh
