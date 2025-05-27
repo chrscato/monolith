@@ -10,6 +10,7 @@ urlpatterns = [
     path('bill/<str:bill_id>/update/', views.update_bill, name='update_bill'),
     path('bill/<str:bill_id>/reset/', views.reset_bill, name='reset_bill'),
     path('bill/<str:bill_id>/pdf/', views.view_bill_pdf, name='view_bill_pdf'),
+    path('bill/<str:bill_id>/map/<str:order_id>/', views.map_bill_to_order, name='map_bill_to_order'),
     path('line-item/<str:line_item_id>/update/', views.line_item_update, name='line_item_update'),
     path('line-item/<str:line_item_id>/delete/', views.line_item_delete, name='line_item_delete'),
     path('provider/<str:provider_id>/update/<str:bill_id>/', views.update_provider, name='update_provider'),

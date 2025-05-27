@@ -5,14 +5,16 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect, HttpResponse, Http404
 from django.contrib import messages
 import logging
-from .forms import BillUpdateForm, LineItemUpdateForm, OTARateForm, PPORateForm
+from .forms import BillUpdateForm, LineItemUpdateForm, OTARateForm, PPORateForm, BillMappingForm
+from .utils import extract_last_name, normalize_date, similar
 from django.contrib.auth.decorators import login_required
 import boto3
 import os
 import tempfile
 from botocore.exceptions import ClientError
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 import uuid
+from datetime import date, timedelta, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -551,6 +553,112 @@ def dashboard(request):
 def bill_detail(request, bill_id):
     """Show comprehensive details for a bill with all data needed for manual review."""
     try:
+        # Add debug logging at the start
+        logger.info(f"bill_detail called for {bill_id}, method: {request.method}")
+        if request.method == 'POST':
+            logger.info(f"POST data keys: {list(request.POST.keys())}")
+            logger.info(f"Full POST data: {dict(request.POST)}")
+
+        # Handle POST requests first (before building context)
+        if request.method == 'POST':
+            logger.info("Processing POST request")
+            
+            # Handle bill mapping search
+            if 'search_orders' in request.POST:
+                logger.info("Processing search_orders POST")
+                mapping_form = BillMappingForm(request.POST)
+                
+                if mapping_form.is_valid():
+                    logger.info("Mapping form is valid")
+                    logger.info(f"Form cleaned data: {mapping_form.cleaned_data}")
+                    
+                    try:
+                        # Create connection and cursor inside the try block
+                        with connection.cursor() as search_cursor:
+                            # Get search parameters from form
+                            patient_last_name = mapping_form.cleaned_data['patient_last_name'].strip()
+                            date_from = mapping_form.cleaned_data['date_from']
+                            date_to = mapping_form.cleaned_data['date_to']
+                            
+                            # Convert dates to string format for database query
+                            date_from_str = date_from.strftime('%Y-%m-%d')
+                            date_to_str = date_to.strftime('%Y-%m-%d')
+                            
+                            logger.info(f"Searching for patient name containing: '{patient_last_name}' between {date_from_str} and {date_to_str}")
+                            
+                            # Simple SQL search with LIKE pattern
+                            search_cursor.execute("""
+                                SELECT DISTINCT 
+                                    o.Order_ID,
+                                    o.Patient_Last_Name,
+                                    o.Patient_First_Name,
+                                    o.Patient_DOB,
+                                    MIN(oli.DOS) as earliest_dos,
+                                    MAX(oli.DOS) as latest_dos,
+                                    COUNT(oli.CPT) as cpt_count,
+                                    GROUP_CONCAT(DISTINCT oli.CPT) as cpt_codes
+                                FROM orders o
+                                JOIN order_line_items oli ON o.Order_ID = oli.Order_ID
+                                WHERE o.Patient_Last_Name LIKE %s
+                                AND oli.DOS >= %s
+                                AND oli.DOS <= %s
+                                GROUP BY o.Order_ID, o.Patient_Last_Name, o.Patient_First_Name, o.Patient_DOB
+                                ORDER BY o.Patient_Last_Name, o.Patient_First_Name
+                                LIMIT 20
+                            """, [f'%{patient_last_name}%', date_from_str, date_to_str])
+
+                            search_results = []
+                            for row in search_cursor.fetchall():
+                                search_results.append({
+                                    'order_id': row[0],
+                                    'patient_last_name': row[1],
+                                    'patient_first_name': row[2],
+                                    'patient_dob': row[3],
+                                    'earliest_dos': row[4],
+                                    'latest_dos': row[5],
+                                    'cpt_count': row[6],
+                                    'cpt_codes': row[7].split(',') if row[7] else []
+                                })
+
+                            logger.info(f"Found {len(search_results)} potential matches")
+                            if not search_results:
+                                logger.info("No matching orders found")
+                                messages.info(request, 'No matching orders found. Try adjusting the search criteria.')
+                            
+                    except Exception as e:
+                        logger.error(f"Error searching for matching orders for bill {bill_id}: {str(e)}")
+                        messages.error(request, 'An error occurred while searching for matching orders.')
+                        search_results = []
+                else:
+                    logger.error(f"Mapping form validation errors: {mapping_form.errors}")
+            
+            # Handle regular bill update
+            elif 'status' in request.POST:
+                logger.info("Processing regular bill update POST")
+                form = BillUpdateForm(request.POST)
+                if form.is_valid():
+                    try:
+                        with connection.cursor() as cursor:
+                            cursor.execute("""
+                                UPDATE ProviderBill
+                                SET status = %s,
+                                    action = %s,
+                                    last_error = %s
+                                WHERE id = %s
+                            """, [
+                                form.cleaned_data['status'],
+                                form.cleaned_data['action'],
+                                form.cleaned_data['last_error'],
+                                bill_id
+                            ])
+                        messages.success(request, 'Bill updated successfully.')
+                    except Exception as e:
+                        logger.error(f"Error updating bill {bill_id}: {e}")
+                        messages.error(request, 'Failed to update bill.')
+                else:
+                    logger.error(f"Bill update form validation errors: {form.errors}")
+                    messages.error(request, 'Please correct the errors below.')
+
         # Load all bill data using patterns similar to process/utils/loader.py
         with connection.cursor() as cursor:
             # Get bill details with provider info
@@ -590,8 +698,8 @@ def bill_detail(request, bill_id):
                 return redirect('bill_review:dashboard')
                 
             bill = dict(zip(columns, bill_row))
-            print(f"DEBUG: Retrieved bill data: {bill}")
-            print(f"DEBUG: Bill status: {bill.get('status')}")
+            logger.info(f"Retrieved bill data: {bill}")
+            logger.info(f"Bill status: {bill.get('status')}")
             
             # Extract provider data from bill
             provider = None
@@ -618,7 +726,7 @@ def bill_detail(request, bill_id):
                     'Phone': bill.get('provider_phone'),
                     'Fax_Number': bill.get('provider_fax')
                 }
-                print(f"DEBUG: Provider data: {provider}")
+                logger.info(f"Provider data: {provider}")
             
             # Initialize form with current bill status
             form = BillUpdateForm(initial={
@@ -626,7 +734,7 @@ def bill_detail(request, bill_id):
                 'action': bill.get('action'),
                 'last_error': bill.get('last_error')
             })
-            print(f"DEBUG: Form initial data: {form.initial}")
+            logger.info(f"Form initial data: {form.initial}")
             
             # Get bill line items
             cursor.execute("""
@@ -814,31 +922,174 @@ def bill_detail(request, bill_id):
                         'line_id': item.get('id')
                     })
             
-            # Prepare context for template
-            context = {
-                'bill': bill,
-                'bill_items': bill_items,
-                'order': order,
-                'order_items': order_items,
-                'provider': provider,
-                'form': form,
-                'is_arthrogram': is_arthrogram,
-                'cpt_categories': cpt_categories,
-                'in_network_rates': in_network_rates,
-                'out_network_rates': out_network_rates,
-                'exact_matches': exact_matches,
-                'billed_not_ordered': billed_not_ordered,
-                'ordered_not_billed': ordered_not_billed,
-                'units_violations': units_violations,
-                'ancillary_codes': ancillary_codes,
-                'provider_network': provider.get('Provider_Network') if provider else None,
-            }
+            # Handle UNMAPPED bill mapping
+            if bill['status'] == 'UNMAPPED':
+                logger.info(f"Bill {bill_id} is UNMAPPED, setting up mapping form")
+                
+                # Extract patient last name from bill
+                patient_full_name = bill.get('patient_name', '')
+                patient_last_name = extract_last_name(patient_full_name)
+                
+                # Get single date from bill line items for initial population
+                target_date = None
+                if bill_items:
+                    dates = []
+                    for item in bill_items:
+                        if item.get('date_of_service'):
+                            normalized = normalize_date(item['date_of_service'])
+                            if normalized:
+                                dates.append(normalized)
+                    if dates:
+                        target_date = min(dates)  # Use earliest date as target
+
+                # Set default target date
+                if not target_date:
+                    target_date = date.today() - timedelta(days=30)  # Default to 30 days ago
+
+                # Initialize form with single date
+                initial_data = {
+                    'patient_last_name': patient_last_name,
+                    'service_date': target_date
+                }
+
+                # Handle form submission
+                if request.method == 'POST' and 'patient_last_name' in request.POST:
+                    mapping_form = BillMappingForm(request.POST)
+                else:
+                    mapping_form = BillMappingForm(initial=initial_data)
+
+                # Perform search with single date (search ±30 days around target)
+                search_results = []
+                if mapping_form.is_valid():
+                    search_data = mapping_form.cleaned_data
+                    search_last_name = search_data['patient_last_name'].strip()
+                    target_service_date = search_data['service_date']
+                    
+                    # Create date range around target date (±30 days)
+                    search_date_from = target_service_date - timedelta(days=30)
+                    search_date_to = target_service_date + timedelta(days=30)
+                    
+                    if search_last_name:
+                        try:
+                            with connection.cursor() as search_cursor:
+                                logger.info(f"Searching for: '{search_last_name}' around {target_service_date} (±30 days)")
+                                
+                                # Use the same query but with calculated date range
+                                search_cursor.execute("""
+                                    SELECT DISTINCT 
+                                        o.Order_ID,
+                                        o.Patient_Last_Name,
+                                        o.Patient_First_Name,
+                                        o.Patient_DOB,
+                                        oli.DOS as service_date
+                                    FROM orders o
+                                    JOIN order_line_items oli ON o.Order_ID = oli.Order_ID
+                                    WHERE (
+                                        o.Patient_Last_Name LIKE %s 
+                                        OR o.Patient_First_Name LIKE %s
+                                    )
+                                    AND oli.DOS >= %s
+                                    AND oli.DOS <= %s
+                                    ORDER BY ABS(DATEDIFF(oli.DOS, %s)), o.Patient_Last_Name
+                                    LIMIT 20
+                                """, [
+                                    f'%{search_last_name}%', 
+                                    f'%{search_last_name}%',
+                                    search_date_from.strftime('%Y-%m-%d'),
+                                    search_date_to.strftime('%Y-%m-%d'),
+                                    target_service_date.strftime('%Y-%m-%d')
+                                ])
+                                
+                                results = search_cursor.fetchall()
+                                logger.info(f"Found {len(results)} potential matches")
+                                
+                                # Format results for template
+                                for row in results:
+                                    # Calculate days difference from target date
+                                    order_dos = None
+                                    days_difference = "Unknown"
+                                    if row[4]:  # service_date
+                                        try:
+                                            order_dos = datetime.strptime(row[4], '%Y-%m-%d').date()
+                                            days_diff = abs((order_dos - target_service_date).days)
+                                            days_difference = f"{days_diff} days"
+                                        except (ValueError, TypeError):
+                                            order_dos = row[4]  # Keep as string if can't parse
+                                    
+                                    # Get CPT codes for this order
+                                    search_cursor.execute("""
+                                        SELECT DISTINCT oli.CPT 
+                                        FROM order_line_items oli 
+                                        WHERE oli.Order_ID = %s 
+                                        ORDER BY oli.CPT
+                                    """, [row[0]])
+                                    cpt_results = search_cursor.fetchall()
+                                    cpt_codes = [cpt[0] for cpt in cpt_results if cpt[0]]
+                                    
+                                    search_results.append({
+                                        'order_id': row[0],
+                                        'patient_name': f"{row[1] or ''}, {row[2] or ''}".strip(', '),
+                                        'patient_dob': row[3] or '',
+                                        'service_date': order_dos or row[4],  # Use parsed date or original
+                                        'days_difference': days_difference,
+                                        'cpt_codes': cpt_codes[:5],  # Limit to first 5 CPT codes
+                                        'cpt_count': len(cpt_codes),
+                                        'full_patient_last': row[1] or '',
+                                        'full_patient_first': row[2] or ''
+                                    })
+                                    
+                        except Exception as e:
+                            logger.error(f"Error searching for orders: {str(e)}")
+                            search_results = []
+                
+                # Initialize context dictionary
+                context = {
+                    'bill': bill,
+                    'bill_items': bill_items,
+                    'order': order,
+                    'order_items': order_items,
+                    'provider': provider,
+                    'form': form,
+                    'is_arthrogram': is_arthrogram,
+                    'cpt_categories': cpt_categories,
+                    'in_network_rates': in_network_rates,
+                    'out_network_rates': out_network_rates,
+                    'exact_matches': exact_matches,
+                    'billed_not_ordered': billed_not_ordered,
+                    'ordered_not_billed': ordered_not_billed,
+                    'units_violations': units_violations,
+                    'ancillary_codes': ancillary_codes,
+                    'provider_network': provider.get('Provider_Network') if provider else None,
+                    'mapping_form': mapping_form,
+                    'search_results': search_results,
+                    'auto_searched': True  # Flag to show results were auto-generated
+                }
+            else:
+                # Initialize context dictionary for non-UNMAPPED bills
+                context = {
+                    'bill': bill,
+                    'bill_items': bill_items,
+                    'order': order,
+                    'order_items': order_items,
+                    'provider': provider,
+                    'form': form,
+                    'is_arthrogram': is_arthrogram,
+                    'cpt_categories': cpt_categories,
+                    'in_network_rates': in_network_rates,
+                    'out_network_rates': out_network_rates,
+                    'exact_matches': exact_matches,
+                    'billed_not_ordered': billed_not_ordered,
+                    'ordered_not_billed': ordered_not_billed,
+                    'units_violations': units_violations,
+                    'ancillary_codes': ancillary_codes,
+                    'provider_network': provider.get('Provider_Network') if provider else None
+                }
             
             return render(request, 'bill_review/bill_detail.html', context)
             
     except Exception as e:
-        logger.exception(f"Error retrieving bill details: {e}")
-        messages.error(request, f"Error retrieving bill details: {str(e)}")
+        logger.error(f"Error in bill_detail: {e}")
+        messages.error(request, "An error occurred while loading the bill details.")
         return redirect('bill_review:dashboard')
 
 def line_item_update(request, line_item_id):
@@ -1121,3 +1372,25 @@ def line_item_delete(request, line_item_id):
             messages.error(request, 'Failed to delete line item.')
     
     return HttpResponseRedirect(reverse('bill_review:dashboard'))
+
+@require_http_methods(['POST'])
+def map_bill_to_order(request, bill_id, order_id):
+    """Map an unmapped bill to an order."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                UPDATE ProviderBill
+                SET claim_id = %s,
+                    status = 'MAPPED',
+                    action = NULL,
+                    last_error = NULL
+                WHERE id = %s
+            """, [order_id, bill_id])
+            
+            messages.success(request, f'Bill successfully mapped to order {order_id}')
+            return redirect('bill_review:bill_detail', bill_id=bill_id)
+            
+    except Exception as e:
+        logger.error(f"Error mapping bill {bill_id} to order {order_id}: {e}")
+        messages.error(request, 'Failed to map bill to order')
+        return redirect('bill_review:bill_detail', bill_id=bill_id)
