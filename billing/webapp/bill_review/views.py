@@ -1159,7 +1159,6 @@ def reset_bill(request, bill_id):
     
     return HttpResponseRedirect(reverse('bill_review:dashboard'))
 
-@login_required
 def update_provider(request, provider_id, bill_id):
     if request.method == 'POST':
         try:
@@ -1226,7 +1225,6 @@ def update_provider(request, provider_id, bill_id):
     # Redirect to dashboard with update_prov_info filter
     return redirect('bill_review:dashboard')
 
-@login_required
 def update_bill(request, bill_id):
     """Update bill status and information."""
     if request.method == 'POST':
