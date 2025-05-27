@@ -1157,7 +1157,8 @@ def reset_bill(request, bill_id):
             logger.error(f"Error resetting bill {bill_id}: {e}")
             messages.error(request, 'Failed to reset bill.')
     
-    return HttpResponseRedirect(reverse('bill_review:dashboard'))
+    # Redirect back to bill detail page instead of dashboard
+    return redirect('bill_review:bill_detail', bill_id=bill_id)
 
 def update_provider(request, provider_id, bill_id):
     if request.method == 'POST':
@@ -1248,7 +1249,14 @@ def update_bill(request, bill_id):
             except Exception as e:
                 logger.error(f"Error updating bill {bill_id}: {e}")
                 messages.error(request, 'Failed to update bill.')
+        else:
+            logger.error(f"Form validation errors: {form.errors}")
+            messages.error(request, 'Please correct the errors below.')
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
     
+    # Always redirect back to the bill detail page
     return redirect('bill_review:bill_detail', bill_id=bill_id)
 
 @require_GET

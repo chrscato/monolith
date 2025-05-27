@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>
             <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" class="d-inline">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-warning" onclick="return confirm('Reset this bill to MAPPED status?')">
+                <button type="submit" name="reset_bill" class="btn btn-warning" onclick="return confirm('Reset this bill to MAPPED status?')">
                     Reset to MAPPED
                 </button>
             </form>
@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Update Bill</button>
+                        <button type="submit" name="update_bill" class="btn btn-primary">Update Bill</button>
                     </form>
                 </div>
             </div>
