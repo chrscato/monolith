@@ -80,9 +80,38 @@ class PPORateForm(forms.Form):
 
 class BillMappingForm(forms.Form):
     patient_last_name = forms.CharField(
-        max_length=100, 
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter patient last name'})
+        required=True,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Enter patient last name',
+            'autocomplete': 'off'
+        }),
+        help_text='Enter the patient\'s last name to search for matching orders'
     )
-    service_date = forms.DateField(
-        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    patient_first_name = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Enter patient first name (optional)',
+            'autocomplete': 'off'
+        }),
+        help_text='Optionally enter the patient\'s first name to narrow the search'
+    )
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date',
+            'placeholder': 'Start date (optional)'
+        }),
+        help_text='Optional start date for order search'
+    )
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date',
+            'placeholder': 'End date (optional)'
+        }),
+        help_text='Optional end date for order search'
     )

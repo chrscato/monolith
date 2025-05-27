@@ -208,118 +208,140 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         </div>
 
-        <!-- Order Mapping (only for UNMAPPED bills) -->
-        {% if bill.status == 'UNMAPPED' %}
+        <!-- Order Mapping Section -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="mappingHeader">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mappingCollapse" aria-expanded="false" aria-controls="mappingCollapse">
-                    🔍 Find Matching Order
+                <button class="accordion-button {% if not search_results and not auto_searched %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#mappingCollapse" aria-expanded="{% if search_results or auto_searched %}true{% else %}false{% endif %}">
+                    <i class="fas fa-link me-2"></i>Order Mapping
                 </button>
             </h2>
-            <div id="mappingCollapse" class="accordion-collapse collapse" aria-labelledby="mappingHeader">
+            <div id="mappingCollapse" class="accordion-collapse collapse {% if search_results or auto_searched %}show{% endif %}" aria-labelledby="mappingHeader">
                 <div class="accordion-body">
-                    <div class="card-body">
-                        <form method="post" class="mb-4">
-                            {% csrf_token %}
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="{{ mapping_form.patient_last_name.id_for_label }}">Patient Last Name</label>
-                                        {{ mapping_form.patient_last_name }}
-                                        <small class="form-text text-muted">Enter the patient's last name to search for matching orders</small>
-                                    </div>
+                    <!-- Mapping Form -->
+                    <form method="post" class="mb-4">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            <!-- Patient Last Name Field -->
+                            <div class="col-12">
+                                <div class="form-floating">
+                                    {{ mapping_form.patient_last_name }}
+                                    <label for="{{ mapping_form.patient_last_name.id_for_label }}">Patient Last Name</label>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="{{ mapping_form.service_date.id_for_label }}">Service Date</label>
-                                        {{ mapping_form.service_date }}
-                                        <small class="form-text text-muted">Search will look ±30 days around this date</small>
-                                    </div>
+                                {% if mapping_form.patient_last_name.help_text %}
+                                    <div class="form-text">{{ mapping_form.patient_last_name.help_text }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Patient First Name Field -->
+                            <div class="col-12">
+                                <div class="form-floating">
+                                    {{ mapping_form.patient_first_name }}
+                                    <label for="{{ mapping_form.patient_first_name.id_for_label }}">Patient First Name</label>
                                 </div>
+                                {% if mapping_form.patient_first_name.help_text %}
+                                    <div class="form-text">{{ mapping_form.patient_first_name.help_text }}</div>
+                                {% endif %}
                             </div>
-                            <div class="mt-3">
-                                <button type="submit" class="btn btn-primary">Search Orders</button>
+                            
+                            <!-- Date Range Fields -->
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    {{ mapping_form.date_from }}
+                                    <label for="{{ mapping_form.date_from.id_for_label }}">Date From</label>
+                                </div>
+                                {% if mapping_form.date_from.help_text %}
+                                    <div class="form-text">{{ mapping_form.date_from.help_text }}</div>
+                                {% endif %}
                             </div>
-                        </form>
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    {{ mapping_form.date_to }}
+                                    <label for="{{ mapping_form.date_to.id_for_label }}">Date To</label>
+                                </div>
+                                {% if mapping_form.date_to.help_text %}
+                                    <div class="form-text">{{ mapping_form.date_to.help_text }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Optional Date Fields Info -->
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Date fields are optional. If not provided, the search will look for orders within the last 30 days.
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button type="submit" name="search_orders" class="btn btn-primary">
+                                <i class="fas fa-search me-2"></i>Search Orders
+                            </button>
+                        </div>
+                    </form>
 
-                        {% if search_results %}
-                            <div class="alert alert-info">
-                                Found {{ search_results|length }} potential matches
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-striped">
-                                    <thead>
+                    <!-- Search Results Table -->
+                    {% if search_results %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Order ID</th>
+                                        <th>Patient Name</th>
+                                        <th>DOB</th>
+                                        <th>Service Date</th>
+                                        <th>CPT Codes</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for result in search_results %}
                                         <tr>
-                                            <th>Order ID</th>
-                                            <th>Patient Name</th>
-                                            <th>DOB</th>
-                                            <th>Service Date</th>
-                                            <th>Days Difference</th>
-                                            <th>CPT Codes</th>
-                                            <th>Action</th>
+                                            <td>{{ result.order_id }}</td>
+                                            <td>{{ result.patient_last_name }}, {{ result.patient_first_name }}</td>
+                                            <td>{{ result.patient_dob }}</td>
+                                            <td>
+                                                {% if result.earliest_dos == result.latest_dos %}
+                                                    {{ result.earliest_dos }}
+                                                {% else %}
+                                                    {{ result.earliest_dos }} to {{ result.latest_dos }}
+                                                {% endif %}
+                                                {% if result.days_difference != "Unknown" %}
+                                                    <br><small class="text-muted">({{ result.days_difference }} from target)</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if result.cpt_codes %}
+                                                    <span class="badge bg-info">{{ result.cpt_count }} codes</span>
+                                                    <div class="mt-1">
+                                                        {% for code in result.cpt_codes %}
+                                                            <span class="badge bg-secondary">{{ code }}</span>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">No CPT codes</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <form method="post" action="{% url 'bill_review:map_bill_to_order' bill.id result.order_id %}" style="display: inline;">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-primary"
+                                                            onclick="return confirm('Map this bill to order {{ result.order_id }}?')">
+                                                        Map to Order
+                                                    </button>
+                                                </form>
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for result in search_results %}
-                                            <tr>
-                                                <td>{{ result.order_id }}</td>
-                                                <td>{{ result.patient_name }}</td>
-                                                <td>{{ result.patient_dob }}</td>
-                                                <td>{{ result.service_date }}</td>
-                                                <td>
-                                                    {% if result.days_difference != "Unknown" %}
-                                                        {% with days=result.days_difference|stringformat:"s"|slice:":-6"|add:"0" %}
-                                                            {% if days|add:"0" <= 7 %}
-                                                                <span class="badge bg-success">{{ result.days_difference }}</span>
-                                                            {% elif days|add:"0" <= 14 %}
-                                                                <span class="badge bg-warning">{{ result.days_difference }}</span>
-                                                            {% else %}
-                                                                <span class="badge bg-danger">{{ result.days_difference }}</span>
-                                                            {% endif %}
-                                                        {% endwith %}
-                                                    {% else %}
-                                                        <span class="badge bg-secondary">{{ result.days_difference }}</span>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    {% if result.cpt_codes %}
-                                                        <div class="d-flex flex-wrap gap-1">
-                                                            {% for code in result.cpt_codes %}
-                                                                <span class="badge bg-info">{{ code }}</span>
-                                                            {% endfor %}
-                                                            {% if result.cpt_count > 5 %}
-                                                                <span class="badge bg-secondary">+{{ result.cpt_count|add:"-5" }} more</span>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% else %}
-                                                        <span class="text-muted">No CPT codes</span>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    <form method="post" style="display: inline;">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="order_id" value="{{ result.order_id }}">
-                                                        <button type="submit" name="map_bill" class="btn btn-sm btn-primary"
-                                                                onclick="return confirm('Map this bill to order {{ result.order_id }}?')">
-                                                            Map to Order
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% elif auto_searched %}
-                            <div class="alert alert-warning">
-                                No matching orders found. Try adjusting the search criteria.
-                            </div>
-                        {% endif %}
-                    </div>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% elif auto_searched %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No matching orders found. Try adjusting the search criteria.
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        {% endif %}
 
         <!-- Provider Information -->
         <div class="accordion-item">
@@ -681,4 +703,22 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 </div>
+
+{% if search_results or auto_searched %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-scroll to search results after page loads
+    setTimeout(function() {
+        const resultsTable = document.querySelector('#mappingCollapse .table-responsive');
+        if (resultsTable) {
+            resultsTable.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
+    }, 100); // Small delay to ensure accordion is fully expanded
+});
+</script>
+{% endif %}
+
 {% endblock %}
