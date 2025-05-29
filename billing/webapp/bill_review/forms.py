@@ -8,6 +8,8 @@ class BillUpdateForm(forms.Form):
         ('FLAGGED', 'Flagged'),
         ('ERROR', 'Error'),
         ('ARTHROGRAM', 'Arthrogram'),
+        ('ESCALATE', 'Escalate'),
+        ('DENIED', 'Denied'),
     ]
     
     ACTION_CHOICES = [
@@ -18,6 +20,9 @@ class BillUpdateForm(forms.Form):
         ('review_rates', 'Review Rates'),
         ('address_line_item_mismatch', 'Address Line Item Mismatch'),
         ('complete_line_item_mismatch', 'Complete Line Item Mismatch'),
+        ('resolve_escalation', 'Resolve Escalation'),
+        ('deny-not a cdx claim', 'Deny - Not a CDX Claim'),
+        ('deny-CO-50', 'Deny - CO-50'),
     ]
     
     status = forms.ChoiceField(choices=STATUS_CHOICES)

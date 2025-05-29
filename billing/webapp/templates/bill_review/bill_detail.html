@@ -564,145 +564,511 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Line Items -->
-    <div class="card">
-        <div class="card-header">
-            <h2 class="h5 mb-0">Bill Line Items</h2>
+        <!-- Line Items -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#lineItemsComparison">
+                    <i class="fas fa-balance-scale me-2"></i>Line Items Comparison
+                    {% if billed_not_ordered or ordered_not_billed %}
+                        <span class="badge bg-warning text-dark ms-2">Discrepancies Found</span>
+                    {% else %}
+                        <span class="badge bg-success ms-2">Items Match</span>
+                    {% endif %}
+                </button>
+            </h2>
+            <div id="lineItemsComparison" class="accordion-collapse collapse show" data-bs-parent="#billAccordion">
+                <div class="accordion-body">
+                    <!-- Summary Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 border-primary">
+                                <div class="card-body">
+                                    <h5 class="card-title text-primary">
+                                        <i class="fas fa-file-invoice me-2"></i>Bill Items
+                                    </h5>
+                                    <h3 class="text-primary">{{ bill_items|length }}</h3>
+                                    <p class="card-text">Total CPT codes billed</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 border-info">
+                                <div class="card-body">
+                                    <h5 class="card-title text-info">
+                                        <i class="fas fa-clipboard-list me-2"></i>Order Items
+                                    </h5>
+                                    <h3 class="text-info">{{ order_items|length }}</h3>
+                                    <p class="card-text">Total CPT codes ordered</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 {% if exact_matches %}border-success{% else %}border-warning{% endif %}">
+                                <div class="card-body">
+                                    <h5 class="card-title {% if exact_matches %}text-success{% else %}text-warning{% endif %}">
+                                        <i class="fas fa-check-double me-2"></i>Exact Matches
+                                    </h5>
+                                    <h3 class="{% if exact_matches %}text-success{% else %}text-warning{% endif %}">{{ exact_matches|length }}</h3>
+                                    <p class="card-text">CPT codes that match exactly</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Side-by-Side Comparison Table -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h5 class="mb-3">
+                                <i class="fas fa-columns me-2"></i>Side-by-Side Comparison
+                                <span class="text-muted small">(Scroll horizontally to see all columns)</span>
+                            </h5>
+                            
+                            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="table-dark sticky-top">
+                                        <tr>
+                                            <th colspan="6" class="text-center bg-primary text-white">
+                                                <i class="fas fa-file-invoice me-2"></i>BILLED ITEMS
+                                            </th>
+                                            <th colspan="6" class="text-center bg-info text-white">
+                                                <i class="fas fa-clipboard-list me-2"></i>ORDERED ITEMS
+                                            </th>
+                                            <th rowspan="2" class="text-center bg-secondary text-white align-middle">
+                                                <i class="fas fa-balance-scale me-1"></i>Match Status
+                                            </th>
+                                        </tr>
+                                        <tr>
+                                            <!-- Bill columns -->
+                                            <th class="bg-primary text-white">CPT Code</th>
+                                            <th class="bg-primary text-white">Category</th>
+                                            <th class="bg-primary text-white">Modifier</th>
+                                            <th class="bg-primary text-white">Units</th>
+                                            <th class="bg-primary text-white">Charge</th>
+                                            <th class="bg-primary text-white">Date</th>
+                                            
+                                            <!-- Order columns -->
+                                            <th class="bg-info text-white">CPT Code</th>
+                                            <th class="bg-info text-white">Category</th>
+                                            <th class="bg-info text-white">Modifier</th>
+                                            <th class="bg-info text-white">Units</th>
+                                            <th class="bg-info text-white">Charge</th>
+                                            <th class="bg-info text-white">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% load bill_review_extras %}
+                                        {% for item in comparison_data %}
+                                        <tr class="{% if item.match_type == 'exact' %}table-success
+                                                  {% elif item.match_type == 'category' %}table-warning
+                                                  {% elif item.match_type == 'bill_only' %}table-danger
+                                                  {% elif item.match_type == 'order_only' %}table-info
+                                                  {% else %}table-light{% endif %}">
+                                            
+                                            <!-- Bill Item Columns -->
+                                            <td class="fw-bold">
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.cpt_code }}
+                                                    {% if item.bill_item.cpt_code|is_ancillary:ancillary_codes %}
+                                                        <span class="badge bg-secondary ms-1">Ancillary</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    <div class="small">
+                                                        <strong>{{ cpt_categories|get_category:item.bill_item.cpt_code }}</strong>
+                                                        <br>
+                                                        <span class="text-muted">{{ cpt_categories|get_subcategory:item.bill_item.cpt_code }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.modifier|default:"-" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.units }}
+                                                    {% if item.bill_item.units > 1 and not item.bill_item.cpt_code|is_ancillary:ancillary_codes %}
+                                                        <i class="fas fa-exclamation-triangle text-warning ms-1" title="Multiple units"></i>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    ${{ item.bill_item.charge_amount|floatformat:2 }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.date_of_service|date:"m/d/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            
+                                            <!-- Order Item Columns -->
+                                            <td class="fw-bold">
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.CPT }}
+                                                    {% if item.order_item.CPT|is_ancillary:ancillary_codes %}
+                                                        <span class="badge bg-secondary ms-1">Ancillary</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    <div class="small">
+                                                        <strong>{{ cpt_categories|get_category:item.order_item.CPT }}</strong>
+                                                        <br>
+                                                        <span class="text-muted">{{ cpt_categories|get_subcategory:item.order_item.CPT }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.modifier|default:"-" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.units|default:"1" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    ${{ item.order_item.Charge|floatformat:2|default:"0.00" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.DOS|date:"m/d/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            
+                                            <!-- Match Status Column -->
+                                            <td class="text-center">
+                                                {% if item.match_type == 'exact' %}
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check me-1"></i>Exact Match
+                                                    </span>
+                                                {% elif item.match_type == 'category' %}
+                                                    <span class="badge bg-warning text-dark">
+                                                        <i class="fas fa-adjust me-1"></i>Category Match
+                                                    </span>
+                                                {% elif item.match_type == 'bill_only' %}
+                                                    <span class="badge bg-danger">
+                                                        <i class="fas fa-plus me-1"></i>Billed Only
+                                                    </span>
+                                                {% elif item.match_type == 'order_only' %}
+                                                    <span class="badge bg-info">
+                                                        <i class="fas fa-minus me-1"></i>Ordered Only
+                                                    </span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="13" class="text-center text-muted py-4">
+                                                <i class="fas fa-info-circle me-2"></i>No line items to compare
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-info-circle me-2"></i>Legend
+                                    </h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <span class="badge bg-success me-2">Exact Match</span>
+                                            <small>CPT codes match exactly</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-warning text-dark me-2">Category Match</span>
+                                            <small>Same category, different CPT</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-danger me-2">Billed Only</span>
+                                            <small>Billed but not ordered</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-info me-2">Ordered Only</span>
+                                            <small>Ordered but not billed</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-primary btn-sm" onclick="highlightDiscrepancies()">
+                                    <i class="fas fa-highlight me-1"></i>Highlight Discrepancies
+                                </button>
+                                <button type="button" class="btn btn-success btn-sm" onclick="exportComparison()">
+                                    <i class="fas fa-download me-1"></i>Export Comparison
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>CPT Code</th>
-                            <th>Category</th>
-                            <th>Modifier</th>
-                            <th>Units</th>
-                            <th>Charge Amount</th>
-                            <th>Allowed Amount</th>
-                            <th>In-Network Rate</th>
-                            <th>Out-Network Rate</th>
-                            <th>Decision</th>
-                            <th>Reason</th>
-                            <th>Date of Service</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in bill_items %}
-                        <tr>
-                            <td>{{ item.cpt_code }}</td>
-                            <td>{% if item.cpt_code in cpt_categories %}{{ cpt_categories.item.cpt_code.category }}{% endif %}</td>
-                            <td>{{ item.modifier|default:"-" }}</td>
-                            <td>{{ item.units }}</td>
-                            <td>${{ item.charge_amount }}</td>
-                            <td>${{ item.allowed_amount|default:"-" }}</td>
-                            <td>${{ in_network_rates.item.cpt_code|default:"-" }}</td>
-                            <td>${{ out_network_rates.item.cpt_code|default:"-" }}</td>
-                            <td>
-                                <span class="badge {% if item.decision == 'approved' %}bg-success{% elif item.decision == 'denied' %}bg-danger{% else %}bg-secondary{% endif %}">
-                                    {{ item.decision }}
-                                </span>
-                            </td>
-                            <td>{{ item.reason_code|default:"-" }}</td>
-                            <td>{{ item.date_of_service|date:"Y-m-d" }}</td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
-                                        Edit
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteLineItem{{ item.id }}">
-                                        Delete
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
 
-                        <!-- Edit Line Item Modal -->
-                        <div class="modal fade" id="editLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Line Item</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <!-- Bill Line Items (Editable) -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#billLineItems">
+                    <i class="fas fa-edit me-2"></i>Bill Line Items
+                </button>
+            </h2>
+            <div id="billLineItems" class="accordion-collapse collapse" data-bs-parent="#billAccordion">
+                <div class="accordion-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>CPT Code</th>
+                                    <th>Category</th>
+                                    <th>Modifier</th>
+                                    <th>Units</th>
+                                    <th>Charge Amount</th>
+                                    <th>Allowed Amount</th>
+                                    <th>In-Network Rate</th>
+                                    <th>Out-Network Rate</th>
+                                    <th>Decision</th>
+                                    <th>Reason</th>
+                                    <th>Date of Service</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in bill_items %}
+                                <tr>
+                                    <td>{{ item.cpt_code }}</td>
+                                    <td>{% if item.cpt_code in cpt_categories %}{{ cpt_categories|get_category:item.cpt_code }}{% endif %}</td>
+                                    <td>{{ item.modifier|default:"-" }}</td>
+                                    <td>{{ item.units }}</td>
+                                    <td>${{ item.charge_amount }}</td>
+                                    <td>${{ item.allowed_amount|default:"-" }}</td>
+                                    <td>${{ in_network_rates|get_item:item.cpt_code|default:"-" }}</td>
+                                    <td>${{ out_network_rates|get_item:item.cpt_code|default:"-" }}</td>
+                                    <td>
+                                        <span class="badge {% if item.decision == 'approved' %}bg-success{% elif item.decision == 'denied' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                            {{ item.decision }}
+                                        </span>
+                                    </td>
+                                    <td>{{ item.reason_code|default:"-" }}</td>
+                                    <td>{{ item.date_of_service|date:"Y-m-d" }}</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
+                                                Edit
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteLineItem{{ item.id }}">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Edit Line Item Modal -->
+                                <div class="modal fade" id="editLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Edit Line Item</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <form method="post" action="{% url 'bill_review:line_item_update' item.id %}">
+                                                {% csrf_token %}
+                                                <div class="modal-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">CPT Code</label>
+                                                        <input type="text" name="cpt_code" class="form-control" value="{{ item.cpt_code }}" required>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Modifier</label>
+                                                        <input type="text" name="modifier" class="form-control" value="{{ item.modifier|default:'' }}">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Units</label>
+                                                        <input type="number" name="units" class="form-control" value="{{ item.units }}" required>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Charge Amount</label>
+                                                        <input type="number" step="0.01" name="charge_amount" class="form-control" value="{{ item.charge_amount }}" required>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Allowed Amount</label>
+                                                        <input type="number" step="0.01" name="allowed_amount" class="form-control" value="{{ item.allowed_amount|default:'' }}">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Decision</label>
+                                                        <select name="decision" class="form-select" required>
+                                                            <option value="pending" {% if item.decision == 'pending' %}selected{% endif %}>Pending</option>
+                                                            <option value="approved" {% if item.decision == 'approved' %}selected{% endif %}>Approved</option>
+                                                            <option value="denied" {% if item.decision == 'denied' %}selected{% endif %}>Denied</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Reason Code</label>
+                                                        <input type="text" name="reason_code" class="form-control" value="{{ item.reason_code|default:'' }}">
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                </div>
+                                            </form>
+                                        </div>
                                     </div>
-                                    <form method="post" action="{% url 'bill_review:line_item_update' item.id %}">
-                                        {% csrf_token %}
-                                        <div class="modal-body">
-                                            <div class="mb-3">
-                                                <label class="form-label">CPT Code</label>
-                                                <input type="text" name="cpt_code" class="form-control" value="{{ item.cpt_code }}" required>
+                                </div>
+
+                                <!-- Delete Line Item Modal -->
+                                <div class="modal fade" id="deleteLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Delete Line Item</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Modifier</label>
-                                                <input type="text" name="modifier" class="form-control" value="{{ item.modifier|default:'' }}">
+                                            <div class="modal-body">
+                                                <p>Are you sure you want to delete this line item?</p>
+                                                <p><strong>CPT Code:</strong> {{ item.cpt_code }}</p>
+                                                <p><strong>Charge Amount:</strong> ${{ item.charge_amount }}</p>
                                             </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Units</label>
-                                                <input type="number" name="units" class="form-control" value="{{ item.units }}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Charge Amount</label>
-                                                <input type="number" step="0.01" name="charge_amount" class="form-control" value="{{ item.charge_amount }}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Allowed Amount</label>
-                                                <input type="number" step="0.01" name="allowed_amount" class="form-control" value="{{ item.allowed_amount|default:'' }}">
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Decision</label>
-                                                <select name="decision" class="form-select" required>
-                                                    <option value="pending" {% if item.decision == 'pending' %}selected{% endif %}>Pending</option>
-                                                    <option value="approved" {% if item.decision == 'approved' %}selected{% endif %}>Approved</option>
-                                                    <option value="denied" {% if item.decision == 'denied' %}selected{% endif %}>Denied</option>
-                                                </select>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Reason Code</label>
-                                                <input type="text" name="reason_code" class="form-control" value="{{ item.reason_code|default:'' }}">
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <form method="post" action="{% url 'bill_review:line_item_delete' item.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-danger">Delete</button>
+                                                </form>
                                             </div>
                                         </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Delete Line Item Modal -->
-                        <div class="modal fade" id="deleteLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Delete Line Item</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <p>Are you sure you want to delete this line item?</p>
-                                        <p><strong>CPT Code:</strong> {{ item.cpt_code }}</p>
-                                        <p><strong>Charge Amount:</strong> ${{ item.charge_amount }}</p>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                        <form method="post" action="{% url 'bill_review:line_item_delete' item.id %}">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-danger">Delete</button>
-                                        </form>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.table-responsive {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.comparison-highlight {
+    background-color: #fff3cd !important;
+    animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0%, 100% { background-color: #fff3cd; }
+    50% { background-color: #ffeaa7; }
+}
+
+.table-bordered td, .table-bordered th {
+    border-width: 1px;
+}
+
+.table th {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.table td {
+    font-size: 0.875rem;
+    vertical-align: middle;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+</style>
+
+<script>
+function highlightDiscrepancies() {
+    const discrepancyRows = document.querySelectorAll('.table-danger, .table-info');
+    discrepancyRows.forEach(row => {
+        row.classList.add('comparison-highlight');
+        setTimeout(() => {
+            row.classList.remove('comparison-highlight');
+        }, 3000);
+    });
+}
+
+function exportComparison() {
+    const table = document.querySelector('#lineItemsComparison table');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const csv = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.map(cell => {
+            let text = cell.textContent.trim().replace(/\s+/g, ' ');
+            return '"' + text.replace(/"/g, '""') + '"';
+        }).join(',');
+    }).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bill_comparison_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+</script>
 
 {% if search_results or auto_searched %}
 <script>

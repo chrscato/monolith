@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+{% load bill_review_extras %}
+
+{% block extra_css %}
+<style>
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-responsive {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.comparison-highlight {
+    background-color: #fff3cd !important;
+    animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0%, 100% { background-color: #fff3cd; }
+    50% { background-color: #ffeaa7; }
+}
+
+.table-bordered td, .table-bordered th {
+    border-width: 1px;
+}
+
+.table th {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.table td {
+    font-size: 0.875rem;
+    vertical-align: middle;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+.accordion-button {
+    font-weight: 500;
+}
+
+.alert {
+    border-left: 4px solid;
+}
+
+.alert-warning {
+    border-left-color: #ffc107;
+}
+
+.alert-danger {
+    border-left-color: #dc3545;
+}
+
+.alert-info {
+    border-left-color: #0dcaf0;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle deny reason selection
+    const denyReason = document.getElementById('denyReason');
+    const denyAction = document.getElementById('denyAction');
+    
+    if (denyReason && denyAction) {
+        denyReason.addEventListener('change', function() {
+            if (this.value === 'CO-50 - These are non-covered services') {
+                denyAction.value = 'deny-CO-50';
+            } else if (this.value === 'Claim not found in FileMaker') {
+                denyAction.value = 'deny-not a cdx claim';
+            } else {
+                denyAction.value = '';
+            }
+        });
+    }
+
+    // Auto-scroll to discrepancies if they exist
+    const discrepancies = document.querySelectorAll('.table-danger, .table-warning');
+    if (discrepancies.length > 0) {
+        setTimeout(() => {
+            discrepancies[0].scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+        }, 500);
+    }
+});
+
+function expandAllRows() {
+    console.log('Expanding all rows');
+}
+
+function collapseAllRows() {
+    console.log('Collapsing all rows');
+}
+
+function highlightDiscrepancies() {
+    const discrepancyRows = document.querySelectorAll('.table-danger, .table-info');
+    discrepancyRows.forEach(row => {
+        row.classList.add('comparison-highlight');
+        setTimeout(() => {
+            row.classList.remove('comparison-highlight');
+        }, 3000);
+    });
+}
+
+function exportComparison() {
+    const table = document.querySelector('#lineItemsComparison table');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const csv = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.map(cell => {
+            let text = cell.textContent.trim().replace(/\s+/g, ' ');
+            return '"' + text.replace(/"/g, '""') + '"';
+        }).join(',');
+    }).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bill_comparison_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Bill Details</h1>
+        <div>
+            <a href="{% url 'bill_review:dashboard' %}" class="btn btn-secondary me-2">Back to Dashboard</a>
+            <a href="{% url 'bill_review:view_bill_pdf' bill.id %}" class="btn btn-info me-2" target="_blank">
+                <i class="fas fa-file-pdf"></i> View PDF
+            </a>
+            <button type="button" class="btn btn-warning me-2" data-bs-toggle="modal" data-bs-target="#escalateModal">
+                <i class="fas fa-exclamation-triangle"></i> ESCALATE
+            </button>
+            <button type="button" class="btn btn-warning me-2" data-bs-toggle="modal" data-bs-target="#denyModal">
+                <i class="fas fa-ban"></i> DENY
+            </button>
+            <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" name="reset_bill" class="btn btn-warning" onclick="return confirm('Reset this bill to MAPPED status?')">
+                    Reset to MAPPED
+                </button>
+            </form>
+            <form method="post" action="{% url 'bill_review:update_bill' bill.id %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="GARBAGE">
+                <input type="hidden" name="action" value="">
+                <input type="hidden" name="last_error" value="not a bill">
+                <button type="submit" class="btn btn-danger me-2" onclick="return confirm('Are you sure you want to mark this bill as garbage?')">
+                    <i class="fas fa-trash"></i> GARBAGE
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Escalate Modal -->
+    <div class="modal fade" id="escalateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Escalate Bill</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="escalateMessage" class="form-label">Escalation Message</label>
+                            <textarea class="form-control" id="escalateMessage" name="last_error" rows="3" required></textarea>
+                        </div>
+                        <input type="hidden" name="status" value="ESCALATE">
+                        <input type="hidden" name="action" value="resolve_escalation">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning">Escalate</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deny Modal -->
+    <div class="modal fade" id="denyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Deny Bill</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="denyReason" class="form-label">Denial Reason</label>
+                            <select class="form-select" id="denyReason" name="last_error" required>
+                                <option value="">Select a reason...</option>
+                                <option value="CO-50 - These are non-covered services">CO-50 - These are non-covered services</option>
+                                <option value="Claim not found in FileMaker">Claim not found in FileMaker</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="status" value="DENIED">
+                        <input type="hidden" name="action" id="denyAction" value="">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">Deny</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert for Arthrogram -->
+    {% if is_arthrogram %}
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle"></i> This is an arthrogram procedure.
+    </div>
+    {% endif %}
+
+    <!-- CPT Code Discrepancies Alert -->
+    {% if billed_not_ordered or ordered_not_billed %}
+    <div class="alert alert-warning mb-4">
+        <h5 class="alert-heading">CPT Code Discrepancies Detected</h5>
+        {% if billed_not_ordered %}
+        <p class="mb-1"><strong>Billed but not ordered:</strong></p>
+        <ul class="mb-2">
+            {% for cpt in billed_not_ordered %}
+            <li>{{ cpt }} <span class="text-muted">({{ cpt_categories|get_category:cpt }})</span></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if ordered_not_billed %}
+        <p class="mb-1"><strong>Ordered but not billed:</strong></p>
+        <ul class="mb-0">
+            {% for cpt in ordered_not_billed %}
+            <li>{{ cpt }} <span class="text-muted">({{ cpt_categories|get_category:cpt }})</span></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Units Violations Alert -->
+    {% if units_violations %}
+    <div class="alert alert-danger mb-4">
+        <h5 class="alert-heading">Units Violations Detected</h5>
+        <ul class="mb-0">
+            {% for violation in units_violations %}
+            <li>CPT {{ violation.cpt }} has {{ violation.units }} units (should be 1 for non-ancillary codes)</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Main Accordion -->
+    <div class="accordion mb-4" id="billAccordion">
+        <!-- Line Items Comparison - NEW ENHANCED SECTION -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#lineItemsComparison">
+                    <i class="fas fa-balance-scale me-2"></i>Line Items Comparison
+                    {% if billed_not_ordered or ordered_not_billed %}
+                        <span class="badge bg-warning text-dark ms-2">Discrepancies Found</span>
+                    {% else %}
+                        <span class="badge bg-success ms-2">Items Match</span>
+                    {% endif %}
+                </button>
+            </h2>
+            <div id="lineItemsComparison" class="accordion-collapse collapse show" data-bs-parent="#billAccordion">
+                <div class="accordion-body">
+                    <!-- Comparison Summary Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 border-primary">
+                                <div class="card-body">
+                                    <h5 class="card-title text-primary">
+                                        <i class="fas fa-file-invoice me-2"></i>Bill Items
+                                    </h5>
+                                    <h3 class="text-primary">{{ bill_items|length }}</h3>
+                                    <p class="card-text">Total CPT codes billed</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 border-info">
+                                <div class="card-body">
+                                    <h5 class="card-title text-info">
+                                        <i class="fas fa-clipboard-list me-2"></i>Order Items
+                                    </h5>
+                                    <h3 class="text-info">{{ order_items|length }}</h3>
+                                    <p class="card-text">Total CPT codes ordered</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100 {% if exact_matches %}border-success{% else %}border-warning{% endif %}">
+                                <div class="card-body">
+                                    <h5 class="card-title {% if exact_matches %}text-success{% else %}text-warning{% endif %}">
+                                        <i class="fas fa-check-double me-2"></i>Exact Matches
+                                    </h5>
+                                    <h3 class="{% if exact_matches %}text-success{% else %}text-warning{% endif %}">{{ exact_matches|length }}</h3>
+                                    <p class="card-text">CPT codes that match exactly</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Side-by-Side Comparison Table -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h5 class="mb-3">
+                                <i class="fas fa-columns me-2"></i>Side-by-Side Comparison
+                                <span class="text-muted small">(Scroll horizontally to see all columns)</span>
+                            </h5>
+                            
+                            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                                <table class="table table-bordered table-hover sticky-header">
+                                    <thead class="table-dark sticky-top">
+                                        <tr>
+                                            <th colspan="6" class="text-center bg-primary text-white">
+                                                <i class="fas fa-file-invoice me-2"></i>BILLED ITEMS
+                                            </th>
+                                            <th colspan="6" class="text-center bg-info text-white">
+                                                <i class="fas fa-clipboard-list me-2"></i>ORDERED ITEMS
+                                            </th>
+                                            <th rowspan="2" class="text-center bg-secondary text-white align-middle">
+                                                <i class="fas fa-balance-scale me-1"></i>Match Status
+                                            </th>
+                                        </tr>
+                                        <tr>
+                                            <!-- Bill columns -->
+                                            <th class="bg-primary text-white">CPT Code</th>
+                                            <th class="bg-primary text-white">Category</th>
+                                            <th class="bg-primary text-white">Modifier</th>
+                                            <th class="bg-primary text-white">Units</th>
+                                            <th class="bg-primary text-white">Charge</th>
+                                            <th class="bg-primary text-white">Date</th>
+                                            
+                                            <!-- Order columns -->
+                                            <th class="bg-info text-white">CPT Code</th>
+                                            <th class="bg-info text-white">Category</th>
+                                            <th class="bg-info text-white">Modifier</th>
+                                            <th class="bg-info text-white">Units</th>
+                                            <th class="bg-info text-white">Charge</th>
+                                            <th class="bg-info text-white">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in comparison_data %}
+                                        <tr class="{% if item.match_type == 'exact' %}table-success
+                                                  {% elif item.match_type == 'category' %}table-warning
+                                                  {% elif item.match_type == 'bill_only' %}table-danger
+                                                  {% elif item.match_type == 'order_only' %}table-info
+                                                  {% else %}table-light{% endif %}">
+                                            
+                                            <!-- Bill Item Columns -->
+                                            <td class="fw-bold">
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.cpt_code }}
+                                                    {% if item.bill_item.cpt_code|is_ancillary:ancillary_codes %}
+                                                        <span class="badge bg-secondary ms-1">Ancillary</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    <div class="small">
+                                                        <strong>{{ cpt_categories|get_category:item.bill_item.cpt_code }}</strong>
+                                                        <br>
+                                                        <span class="text-muted">{{ cpt_categories|get_subcategory:item.bill_item.cpt_code }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.modifier|default:"-" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.units }}
+                                                    {% if item.bill_item.units > 1 and not item.bill_item.cpt_code|is_ancillary:ancillary_codes %}
+                                                        <i class="fas fa-exclamation-triangle text-warning ms-1" title="Multiple units"></i>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    ${{ item.bill_item.charge_amount|floatformat:2 }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.bill_item %}
+                                                    {{ item.bill_item.date_of_service|date:"m/d/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            
+                                            <!-- Order Item Columns -->
+                                            <td class="fw-bold">
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.CPT }}
+                                                    {% if item.order_item.CPT|is_ancillary:ancillary_codes %}
+                                                        <span class="badge bg-secondary ms-1">Ancillary</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    <div class="small">
+                                                        <strong>{{ cpt_categories|get_category:item.order_item.CPT }}</strong>
+                                                        <br>
+                                                        <span class="text-muted">{{ cpt_categories|get_subcategory:item.order_item.CPT }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.modifier|default:"-" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.units|default:"1" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    ${{ item.order_item.Charge|floatformat:2|default:"0.00" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if item.order_item %}
+                                                    {{ item.order_item.DOS|date:"m/d/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            
+                                            <!-- Match Status Column -->
+                                            <td class="text-center">
+                                                {% if item.match_type == 'exact' %}
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check me-1"></i>Exact Match
+                                                    </span>
+                                                {% elif item.match_type == 'category' %}
+                                                    <span class="badge bg-warning text-dark">
+                                                        <i class="fas fa-adjust me-1"></i>Category Match
+                                                    </span>
+                                                {% elif item.match_type == 'bill_only' %}
+                                                    <span class="badge bg-danger">
+                                                        <i class="fas fa-plus me-1"></i>Billed Only
+                                                    </span>
+                                                {% elif item.match_type == 'order_only' %}
+                                                    <span class="badge bg-info">
+                                                        <i class="fas fa-minus me-1"></i>Ordered Only
+                                                    </span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="13" class="text-center text-muted py-4">
+                                                <i class="fas fa-info-circle me-2"></i>No line items to compare
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-info-circle me-2"></i>Legend
+                                    </h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <span class="badge bg-success me-2">Exact Match</span>
+                                            <small>CPT codes match exactly</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-warning text-dark me-2">Category Match</span>
+                                            <small>Same category, different CPT</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-danger me-2">Billed Only</span>
+                                            <small>Billed but not ordered</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-info me-2">Ordered Only</span>
+                                            <small>Ordered but not billed</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ... other accordion items ... -->
+    </div>
+    <!-- ... rest of the template ... -->
+</div>
+{% endblock %} 

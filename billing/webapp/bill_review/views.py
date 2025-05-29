@@ -18,6 +18,152 @@ from datetime import date, timedelta, datetime
 
 logger = logging.getLogger(__name__)
 
+def generate_comparison_data(bill_items, order_items, cpt_categories, ancillary_codes):
+    """
+    Generate comparison data structure for side-by-side display.
+    
+    Args:
+        bill_items: List of bill line items
+        order_items: List of order line items
+        cpt_categories: Dict mapping CPT codes to categories
+        ancillary_codes: Set of ancillary CPT codes
+        
+    Returns:
+        List of comparison items for template rendering
+    """
+    comparison_data = []
+    processed_bill_items = set()
+    processed_order_items = set()
+    
+    # Create mappings for quick lookup
+    bill_cpt_map = {}
+    order_cpt_map = {}
+    
+    for item in bill_items:
+        cpt = item.get('cpt_code', '').strip()
+        if cpt:
+            if cpt not in bill_cpt_map:
+                bill_cpt_map[cpt] = []
+            bill_cpt_map[cpt].append(item)
+    
+    for item in order_items:
+        cpt = item.get('CPT', '').strip()
+        if cpt:
+            if cpt not in order_cpt_map:
+                order_cpt_map[cpt] = []
+            order_cpt_map[cpt].append(item)
+    
+    # 1. Find exact matches first
+    for bill_cpt in bill_cpt_map.keys():
+        if bill_cpt in order_cpt_map:
+            # Exact match found
+            bill_items_for_cpt = bill_cpt_map[bill_cpt]
+            order_items_for_cpt = order_cpt_map[bill_cpt]
+            
+            # Pair them up (if multiple items with same CPT)
+            max_items = max(len(bill_items_for_cpt), len(order_items_for_cpt))
+            
+            for i in range(max_items):
+                bill_item = bill_items_for_cpt[i] if i < len(bill_items_for_cpt) else None
+                order_item = order_items_for_cpt[i] if i < len(order_items_for_cpt) else None
+                
+                comparison_data.append({
+                    'bill_item': bill_item,
+                    'order_item': order_item,
+                    'match_type': 'exact',
+                    'cpt_code': bill_cpt
+                })
+                
+                if bill_item:
+                    processed_bill_items.add(id(bill_item))
+                if order_item:
+                    processed_order_items.add(id(order_item))
+    
+    # 2. Find category matches for remaining items
+    remaining_bill_items = [item for item in bill_items if id(item) not in processed_bill_items]
+    remaining_order_items = [item for item in order_items if id(item) not in processed_order_items]
+    
+    # Group remaining items by category
+    bill_categories = {}
+    order_categories = {}
+    
+    for item in remaining_bill_items:
+        cpt = item.get('cpt_code', '').strip()
+        if cpt in cpt_categories:
+            category = cpt_categories[cpt].get('category', 'Unknown')
+            subcategory = cpt_categories[cpt].get('subcategory', '')
+            cat_key = f"{category}_{subcategory}"
+            
+            if cat_key not in bill_categories:
+                bill_categories[cat_key] = []
+            bill_categories[cat_key].append(item)
+    
+    for item in remaining_order_items:
+        cpt = item.get('CPT', '').strip()
+        if cpt in cpt_categories:
+            category = cpt_categories[cpt].get('category', 'Unknown')
+            subcategory = cpt_categories[cpt].get('subcategory', '')
+            cat_key = f"{category}_{subcategory}"
+            
+            if cat_key not in order_categories:
+                order_categories[cat_key] = []
+            order_categories[cat_key].append(item)
+    
+    # Match by category
+    for cat_key in bill_categories.keys():
+        if cat_key in order_categories:
+            bill_items_for_cat = bill_categories[cat_key]
+            order_items_for_cat = order_categories[cat_key]
+            
+            max_items = max(len(bill_items_for_cat), len(order_items_for_cat))
+            
+            for i in range(max_items):
+                bill_item = bill_items_for_cat[i] if i < len(bill_items_for_cat) else None
+                order_item = order_items_for_cat[i] if i < len(order_items_for_cat) else None
+                
+                comparison_data.append({
+                    'bill_item': bill_item,
+                    'order_item': order_item,
+                    'match_type': 'category',
+                    'category': cat_key.split('_')[0]
+                })
+                
+                if bill_item:
+                    processed_bill_items.add(id(bill_item))
+                if order_item:
+                    processed_order_items.add(id(order_item))
+    
+    # 3. Add remaining bill-only items
+    remaining_bill_items = [item for item in bill_items if id(item) not in processed_bill_items]
+    for item in remaining_bill_items:
+        comparison_data.append({
+            'bill_item': item,
+            'order_item': None,
+            'match_type': 'bill_only',
+            'cpt_code': item.get('cpt_code', '')
+        })
+    
+    # 4. Add remaining order-only items  
+    remaining_order_items = [item for item in order_items if id(item) not in processed_order_items]
+    for item in remaining_order_items:
+        comparison_data.append({
+            'bill_item': None,
+            'order_item': item,
+            'match_type': 'order_only',
+            'cpt_code': item.get('CPT', '')
+        })
+    
+    # Sort comparison data for better display
+    # Priority: exact matches first, then category matches, then mismatches
+    sort_priority = {'exact': 1, 'category': 2, 'bill_only': 3, 'order_only': 4}
+    comparison_data.sort(key=lambda x: (
+        sort_priority.get(x['match_type'], 5),
+        x.get('cpt_code', ''),
+        x.get('category', '')
+    ))
+    
+    return comparison_data
+
 def add_ota_rate(request, bill_id, line_item_id):
     """Add a new OTA rate for a line item."""
     try:
@@ -981,6 +1127,14 @@ def bill_detail(request, bill_id):
                         'line_id': item.get('id')
                     })
             
+            # Generate comparison data for side-by-side view
+            comparison_data = generate_comparison_data(
+                bill_items=bill_items,
+                order_items=order_items,
+                cpt_categories=cpt_categories,
+                ancillary_codes=ancillary_codes
+            )
+            
             # Handle UNMAPPED bill mapping
             if bill['status'] == 'UNMAPPED':
                 logger.info(f"Bill {bill_id} is UNMAPPED, setting up mapping form")
@@ -1134,7 +1288,8 @@ def bill_detail(request, bill_id):
                     'provider_network': provider.get('Provider_Network') if provider else None,
                     'mapping_form': mapping_form,
                     'search_results': search_results,
-                    'auto_searched': True  # Flag to show results were auto-generated
+                    'auto_searched': True,  # Flag to show results were auto-generated
+                    'comparison_data': comparison_data,
                 }
             else:
                 # Initialize context dictionary for non-UNMAPPED bills
@@ -1154,7 +1309,8 @@ def bill_detail(request, bill_id):
                     'ordered_not_billed': ordered_not_billed,
                     'units_violations': units_violations,
                     'ancillary_codes': ancillary_codes,
-                    'provider_network': provider.get('Provider_Network') if provider else None
+                    'provider_network': provider.get('Provider_Network') if provider else None,
+                    'comparison_data': comparison_data,
                 }
             
             return render(request, 'bill_review/bill_detail.html', context)
@@ -1328,8 +1484,8 @@ def update_bill(request, bill_id):
                 for error in errors:
                     messages.error(request, f"{field}: {error}")
     
-    # Always redirect back to the bill detail page
-    return redirect('bill_review:bill_detail', bill_id=bill_id)
+    # Redirect to dashboard
+    return redirect('bill_review:dashboard')
 
 @require_GET
 def view_bill_pdf(request, bill_id):
