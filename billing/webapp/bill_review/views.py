@@ -919,28 +919,6 @@ def bill_detail(request, bill_id):
             })
             logger.info(f"Form initial data: {form.initial}")
             
-            # Initialize mapping form with appropriate defaults
-            if request.method == 'POST' and 'search_orders' in request.POST:
-                # Use POST data for form initialization to preserve user input
-                mapping_form = BillMappingForm(request.POST)
-            else:
-                # Set default values for first-time load
-                today = date.today()
-                default_date_from = today - timedelta(days=30)
-                default_date_to = today + timedelta(days=30)
-                
-                # Extract patient last name from bill
-                patient_name = bill.get('patient_name', '')
-                patient_last_name = extract_last_name(patient_name)
-                
-                mapping_form = BillMappingForm(initial={
-                    'patient_last_name': patient_last_name,
-                    'date_from': default_date_from,
-                    'date_to': default_date_to
-                })
-            
-            logger.info(f"Mapping form initial data: {mapping_form.initial}")
-            
             # Get bill line items
             cursor.execute("""
                 SELECT bli.* 
@@ -1135,183 +1113,161 @@ def bill_detail(request, bill_id):
                 ancillary_codes=ancillary_codes
             )
             
-            # Handle UNMAPPED bill mapping
-            if bill['status'] == 'UNMAPPED':
-                logger.info(f"Bill {bill_id} is UNMAPPED, setting up mapping form")
-                
-                # Extract patient last name from bill
-                patient_full_name = bill.get('patient_name', '')
-                patient_last_name = extract_last_name(patient_full_name)
-                
-                # Get single date from bill line items for initial population
-                target_date = None
-                if bill_items:
-                    dates = []
-                    for item in bill_items:
-                        if item.get('date_of_service'):
-                            normalized = normalize_date(item['date_of_service'])
-                            if normalized:
-                                dates.append(normalized)
-                    if dates:
-                        target_date = min(dates)  # Use earliest date as target
+            # Initialize mapping form with appropriate defaults
+            logger.info(f"Setting up mapping form for bill {bill_id}")
+            
+            # Extract patient last name from bill
+            patient_full_name = bill.get('patient_name', '')
+            patient_last_name = extract_last_name(patient_full_name)
+            
+            # Get single date from bill line items for initial population
+            target_date = None
+            if bill_items:
+                dates = []
+                for item in bill_items:
+                    if item.get('date_of_service'):
+                        normalized = normalize_date(item['date_of_service'])
+                        if normalized:
+                            dates.append(normalized)
+                if dates:
+                    target_date = min(dates)  # Use earliest date as target
 
-                # Set default target date
-                if not target_date:
-                    target_date = date.today() - timedelta(days=30)  # Default to 30 days ago
+            # Set default target date
+            if not target_date:
+                target_date = date.today() - timedelta(days=30)  # Default to 30 days ago
 
-                # Initialize form with date range
-                initial_data = {
-                    'patient_last_name': patient_last_name,
-                    'date_from': target_date - timedelta(days=30),
-                    'date_to': target_date + timedelta(days=30)
-                }
+            # Initialize form with date range
+            initial_data = {
+                'patient_last_name': patient_last_name,
+                'date_from': target_date - timedelta(days=30),
+                'date_to': target_date + timedelta(days=30)
+            }
 
-                # Handle form submission
-                if request.method == 'POST' and 'patient_last_name' in request.POST:
-                    mapping_form = BillMappingForm(request.POST)
-                else:
-                    mapping_form = BillMappingForm(initial=initial_data)
-
-                # Perform search with date range
-                search_results = []
-                if mapping_form.is_valid():
-                    search_data = mapping_form.cleaned_data
-                    search_last_name = search_data['patient_last_name'].strip()
-                    search_first_name = search_data.get('patient_first_name', '').strip()
-                    date_from = search_data.get('date_from')
-                    date_to = search_data.get('date_to')
-                    
-                    if search_last_name:
-                        try:
-                            with connection.cursor() as search_cursor:
-                                logger.info(f"Searching for: '{search_last_name}' with date range: {date_from} to {date_to}")
-                                
-                                # Build the query based on available date parameters
-                                query = """
-                                    SELECT DISTINCT 
-                                        o.Order_ID,
-                                        o.Patient_Last_Name,
-                                        o.Patient_First_Name,
-                                        o.Patient_DOB,
-                                        MIN(oli.DOS) as earliest_dos,
-                                        MAX(oli.DOS) as latest_dos,
-                                        COUNT(oli.CPT) as cpt_count,
-                                        GROUP_CONCAT(DISTINCT oli.CPT) as cpt_codes,
-                                        MIN(ABS(julianday(oli.DOS) - julianday(%s))) as min_date_diff
-                                    FROM orders o
-                                    JOIN order_line_items oli ON o.Order_ID = oli.Order_ID
-                                    WHERE o.Patient_Last_Name LIKE %s
-                                """
-                                params = [target_date.strftime('%Y-%m-%d'), f'%{search_last_name}%']
-                                
-                                # Add first name condition if provided
-                                if search_first_name:
-                                    query += " AND o.Patient_First_Name LIKE %s"
-                                    params.append(f'%{search_first_name}%')
-                                    logger.info(f"Adding first name search: {search_first_name}")
-                                
-                                # Handle date range logic
-                                if date_from and date_to:
-                                    # Both dates provided - use exact range
-                                    query += " AND oli.DOS >= %s AND oli.DOS <= %s"
-                                    params.extend([date_from.strftime('%Y-%m-%d'), date_to.strftime('%Y-%m-%d')])
-                                    logger.info(f"Using exact date range: {date_from} to {date_to}")
-                                elif date_from:
-                                    # Only start date - search forward 30 days
-                                    query += " AND oli.DOS >= %s AND oli.DOS <= %s"
-                                    end_date = date_from + timedelta(days=30)
-                                    params.extend([date_from.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')])
-                                    logger.info(f"Using forward date range from {date_from} to {end_date}")
-                                elif date_to:
-                                    # Only end date - search backward 30 days
-                                    query += " AND oli.DOS >= %s AND oli.DOS <= %s"
-                                    start_date = date_to - timedelta(days=30)
-                                    params.extend([start_date.strftime('%Y-%m-%d'), date_to.strftime('%Y-%m-%d')])
-                                    logger.info(f"Using backward date range from {start_date} to {date_to}")
-                                else:
-                                    # No dates provided - no date restrictions
-                                    logger.info("No date restrictions applied")
-                                
-                                query += """
-                                    GROUP BY o.Order_ID, o.Patient_Last_Name, o.Patient_First_Name, o.Patient_DOB
-                                    ORDER BY 
-                                        CASE 
-                                            WHEN min_date_diff IS NOT NULL THEN min_date_diff 
-                                            ELSE 999999 
-                                        END,
-                                        o.Patient_Last_Name, 
-                                        o.Patient_First_Name
-                                    LIMIT 20
-                                """
-                                
-                                logger.info(f"Executing search query with params: {params}")
-                                search_cursor.execute(query, params)
-                                
-                                results = search_cursor.fetchall()
-                                logger.info(f"Found {len(results)} potential matches")
-                                
-                                # Format results for template
-                                for row in results:
-                                    search_results.append({
-                                        'order_id': row[0],
-                                        'patient_last_name': row[1],
-                                        'patient_first_name': row[2],
-                                        'patient_dob': row[3],
-                                        'earliest_dos': row[4],
-                                        'latest_dos': row[5],
-                                        'cpt_count': row[6],
-                                        'cpt_codes': row[7].split(',') if row[7] else [],
-                                        'days_difference': f"{row[8]} days" if row[8] is not None else "Unknown"
-                                    })
-                                    
-                        except Exception as e:
-                            logger.error(f"Error searching for orders: {str(e)}")
-                            search_results = []
-                
-                # Initialize context dictionary
-                context = {
-                    'bill': bill,
-                    'bill_items': bill_items,
-                    'order': order,
-                    'order_items': order_items,
-                    'provider': provider,
-                    'form': form,
-                    'is_arthrogram': is_arthrogram,
-                    'cpt_categories': cpt_categories,
-                    'in_network_rates': in_network_rates,
-                    'out_network_rates': out_network_rates,
-                    'exact_matches': exact_matches,
-                    'billed_not_ordered': billed_not_ordered,
-                    'ordered_not_billed': ordered_not_billed,
-                    'units_violations': units_violations,
-                    'ancillary_codes': ancillary_codes,
-                    'provider_network': provider.get('Provider_Network') if provider else None,
-                    'mapping_form': mapping_form,
-                    'search_results': search_results,
-                    'auto_searched': True,  # Flag to show results were auto-generated
-                    'comparison_data': comparison_data,
-                }
+            # Handle form submission
+            if request.method == 'POST' and 'patient_last_name' in request.POST:
+                mapping_form = BillMappingForm(request.POST)
             else:
-                # Initialize context dictionary for non-UNMAPPED bills
-                context = {
-                    'bill': bill,
-                    'bill_items': bill_items,
-                    'order': order,
-                    'order_items': order_items,
-                    'provider': provider,
-                    'form': form,
-                    'is_arthrogram': is_arthrogram,
-                    'cpt_categories': cpt_categories,
-                    'in_network_rates': in_network_rates,
-                    'out_network_rates': out_network_rates,
-                    'exact_matches': exact_matches,
-                    'billed_not_ordered': billed_not_ordered,
-                    'ordered_not_billed': ordered_not_billed,
-                    'units_violations': units_violations,
-                    'ancillary_codes': ancillary_codes,
-                    'provider_network': provider.get('Provider_Network') if provider else None,
-                    'comparison_data': comparison_data,
-                }
+                mapping_form = BillMappingForm(initial=initial_data)
+
+            # Perform search with date range
+            search_results = []
+            if mapping_form.is_valid():
+                search_data = mapping_form.cleaned_data
+                search_last_name = search_data['patient_last_name'].strip()
+                search_first_name = search_data.get('patient_first_name', '').strip()
+                date_from = search_data.get('date_from')
+                date_to = search_data.get('date_to')
+                
+                if search_last_name:
+                    try:
+                        with connection.cursor() as search_cursor:
+                            logger.info(f"Searching for: '{search_last_name}' with date range: {date_from} to {date_to}")
+                            
+                            # Build the query based on available date parameters
+                            query = """
+                                SELECT DISTINCT 
+                                    o.Order_ID,
+                                    o.Patient_Last_Name,
+                                    o.Patient_First_Name,
+                                    o.Patient_DOB,
+                                    MIN(oli.DOS) as earliest_dos,
+                                    MAX(oli.DOS) as latest_dos,
+                                    COUNT(oli.CPT) as cpt_count,
+                                    GROUP_CONCAT(DISTINCT oli.CPT) as cpt_codes,
+                                    MIN(ABS(julianday(oli.DOS) - julianday(%s))) as min_date_diff
+                                FROM orders o
+                                JOIN order_line_items oli ON o.Order_ID = oli.Order_ID
+                                WHERE o.Patient_Last_Name LIKE %s
+                            """
+                            params = [target_date.strftime('%Y-%m-%d'), f'%{search_last_name}%']
+                            
+                            # Add first name condition if provided
+                            if search_first_name:
+                                query += " AND o.Patient_First_Name LIKE %s"
+                                params.append(f'%{search_first_name}%')
+                                logger.info(f"Adding first name search: {search_first_name}")
+                            
+                            # Handle date range logic
+                            if date_from and date_to:
+                                # Both dates provided - use exact range
+                                query += " AND oli.DOS >= %s AND oli.DOS <= %s"
+                                params.extend([date_from.strftime('%Y-%m-%d'), date_to.strftime('%Y-%m-%d')])
+                                logger.info(f"Using exact date range: {date_from} to {date_to}")
+                            elif date_from:
+                                # Only start date - search forward 30 days
+                                query += " AND oli.DOS >= %s AND oli.DOS <= %s"
+                                end_date = date_from + timedelta(days=30)
+                                params.extend([date_from.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')])
+                                logger.info(f"Using forward date range from {date_from} to {end_date}")
+                            elif date_to:
+                                # Only end date - search backward 30 days
+                                query += " AND oli.DOS >= %s AND oli.DOS <= %s"
+                                start_date = date_to - timedelta(days=30)
+                                params.extend([start_date.strftime('%Y-%m-%d'), date_to.strftime('%Y-%m-%d')])
+                                logger.info(f"Using backward date range from {start_date} to {date_to}")
+                            else:
+                                # No dates provided - no date restrictions
+                                logger.info("No date restrictions applied")
+                            
+                            query += """
+                                GROUP BY o.Order_ID, o.Patient_Last_Name, o.Patient_First_Name, o.Patient_DOB
+                                ORDER BY 
+                                    CASE 
+                                        WHEN min_date_diff IS NOT NULL THEN min_date_diff 
+                                        ELSE 999999 
+                                    END,
+                                    o.Patient_Last_Name, 
+                                    o.Patient_First_Name
+                                LIMIT 20
+                            """
+                            
+                            logger.info(f"Executing search query with params: {params}")
+                            search_cursor.execute(query, params)
+                            
+                            results = search_cursor.fetchall()
+                            logger.info(f"Found {len(results)} potential matches")
+                            
+                            # Format results for template
+                            for row in results:
+                                search_results.append({
+                                    'order_id': row[0],
+                                    'patient_last_name': row[1],
+                                    'patient_first_name': row[2],
+                                    'patient_dob': row[3],
+                                    'earliest_dos': row[4],
+                                    'latest_dos': row[5],
+                                    'cpt_count': row[6],
+                                    'cpt_codes': row[7].split(',') if row[7] else [],
+                                    'days_difference': f"{row[8]} days" if row[8] is not None else "Unknown"
+                                })
+                                
+                    except Exception as e:
+                        logger.error(f"Error searching for orders: {str(e)}")
+                        search_results = []
+            
+            # Initialize context dictionary
+            context = {
+                'bill': bill,
+                'bill_items': bill_items,
+                'order': order,
+                'order_items': order_items,
+                'provider': provider,
+                'form': form,
+                'is_arthrogram': is_arthrogram,
+                'cpt_categories': cpt_categories,
+                'in_network_rates': in_network_rates,
+                'out_network_rates': out_network_rates,
+                'exact_matches': exact_matches,
+                'billed_not_ordered': billed_not_ordered,
+                'ordered_not_billed': ordered_not_billed,
+                'units_violations': units_violations,
+                'ancillary_codes': ancillary_codes,
+                'provider_network': provider.get('Provider_Network') if provider else None,
+                'mapping_form': mapping_form,
+                'search_results': search_results,
+                'auto_searched': True,  # Flag to show results were auto-generated
+                'comparison_data': comparison_data,
+            }
             
             return render(request, 'bill_review/bill_detail.html', context)
             

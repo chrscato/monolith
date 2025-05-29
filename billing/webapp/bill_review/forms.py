@@ -23,6 +23,8 @@ class BillUpdateForm(forms.Form):
         ('resolve_escalation', 'Resolve Escalation'),
         ('deny-not a cdx claim', 'Deny - Not a CDX Claim'),
         ('deny-CO-50', 'Deny - CO-50'),
+        ('review_rate', 'Review Rate'),
+        ('apply_rate', 'Apply Rate'),
     ]
     
     status = forms.ChoiceField(choices=STATUS_CHOICES)
