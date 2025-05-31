@@ -6,7 +6,10 @@
         <div class="col">
             <h2>Bill Review Dashboard</h2>
         </div>
-        <div class="col-auto">
+        <div class="col-auto d-flex align-items-center">
+            <a href="{% url 'bill_review:instructions' %}" class="btn btn-outline-info btn-sm me-3">
+                <i class="bi bi-question-circle"></i> Need Help?
+            </a>
             <form method="get" class="d-flex align-items-center">
                 <select name="failure_category" class="form-select me-2" onchange="this.form.submit()">
                     <option value="">All Failure Categories</option>

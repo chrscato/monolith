@@ -1584,3 +1584,7 @@ def map_bill_to_order(request, bill_id, order_id):
         logger.error(f"Error mapping bill {bill_id} to order {order_id}: {e}")
         messages.error(request, 'Failed to map bill to order')
         return redirect('bill_review:bill_detail', bill_id=bill_id)
+
+def instructions(request):
+    """Display process instructions for different bill statuses."""
+    return render(request, 'bill_review/instructions.html')
