@@ -76,7 +76,8 @@ def get_approved_unpaid_bills(limit: Optional[int] = None) -> List[Dict[str, Any
             FROM ProviderBill pb
             INNER JOIN orders o ON pb.claim_id = o.Order_ID
             INNER JOIN providers p ON o.provider_id = p.PrimaryKey
-            WHERE pb.status = 'REVIEWED' 
+            WHERE pb.status = 'REVIEWED'
+            AND pb.action = 'apply_rate'
             AND (pb.bill_paid IS NULL OR pb.bill_paid = 'N')
             ORDER BY pb.created_at ASC
         """
