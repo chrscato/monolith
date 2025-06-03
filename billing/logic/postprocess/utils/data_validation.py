@@ -381,22 +381,51 @@ def print_validation_summary(validation_report: Dict[str, Any]):
     print(f"Valid Line Items: {summary['valid_line_items']}")
     print()
     
-    if validation_report['invalid_bills']:
-        print("INVALID BILLS:")
+    # Print details for all bills (both valid and invalid)
+    all_bills = validation_report['valid_bills'] + validation_report['invalid_bills']
+    for bill in all_bills:
+        bill_id = bill['bill_id']
+        print(f"\nBill ID: {bill_id}")
         print("-" * 40)
-        for invalid_bill in validation_report['invalid_bills']:
-            bill_id = invalid_bill['bill_id']
-            print(f"\nBill ID: {bill_id}")
-            
-            # Bill-level issues
-            bill_val = invalid_bill['bill_validation']
+        
+        # Print bill data
+        bill_data = bill['bill_data']
+        print("Basic Information:")
+        print(f"  Patient Name: {bill_data.get('PatientName', 'N/A')}")
+        print(f"  Claim ID: {bill_data.get('claim_id', 'N/A')}")
+        print(f"  Total Charge: ${bill_data.get('total_charge', 0):.2f}")
+        
+        print("\nProvider Information:")
+        print(f"  Provider Name: {bill_data.get('provider_name', 'N/A')}")
+        print(f"  Provider TIN: {bill_data.get('provider_tin', 'N/A')}")
+        print(f"  Provider NPI: {bill_data.get('provider_npi', 'N/A')}")
+        
+        # Print line items
+        line_items = bill['line_items']
+        if line_items:
+            print("\nLine Items:")
+            for item in line_items:
+                print(f"  CPT: {item.get('cpt_code', 'N/A')}")
+                print(f"    Date of Service: {item.get('date_of_service', 'N/A')}")
+                print(f"    Charge Amount: ${item.get('charge_amount', 0):.2f}")
+                print(f"    Allowed Amount: ${item.get('allowed_amount', 0):.2f}")
+                print(f"    Units: {item.get('units', 'N/A')}")
+                print(f"    Modifier: {item.get('modifier', 'N/A')}")
+                print(f"    Decision: {item.get('decision', 'N/A')}")
+                print()
+        else:
+            print("\nNo line items found")
+        
+        # Print validation issues if any
+        if not bill['is_valid']:
+            print("\nValidation Issues:")
+            bill_val = bill['bill_validation']
             if bill_val['missing_fields']:
                 print(f"  Missing Fields: {', '.join(bill_val['missing_fields'])}")
             if bill_val['warnings']:
                 print(f"  Warnings: {', '.join(bill_val['warnings'])}")
             
-            # Line item issues
-            line_val = invalid_bill['line_items_validation']
+            line_val = bill['line_items_validation']
             if line_val['line_item_issues']:
                 print(f"  Line Item Issues:")
                 for issue in line_val['line_item_issues']:
