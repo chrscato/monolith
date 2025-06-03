@@ -191,6 +191,9 @@ def standardize_date_format(date_str: str) -> Optional[str]:
             date_str = date_str.split(separator)[0].strip()
             break
     
+    # Remove any non-date text (like "MX" or other prefixes)
+    date_str = re.sub(r'^[^0-9]+', '', date_str)
+    
     # Common date formats to try
     formats = [
         # Year first formats
@@ -219,6 +222,12 @@ def standardize_date_format(date_str: str) -> Optional[str]:
         '%b %d, %Y',     # Jan 01, 2024
         '%d %B %Y',      # 01 January 2024
         '%d %b %Y',      # 01 Jan 2024
+        
+        # Special formats
+        '%m %d %Y',      # 01 01 2024
+        '%m %d %y',      # 01 01 24
+        '%d %m %Y',      # 01 01 2024
+        '%d %m %y',      # 01 01 24
     ]
     
     # Try each format
@@ -234,7 +243,7 @@ def standardize_date_format(date_str: str) -> Optional[str]:
                     parsed_date = parsed_date.replace(year=parsed_date.year + 1900)
             
             # Validate reasonable year range (medical billing context)
-            if 2020 <= parsed_date.year <= 2030:
+            if 1900 <= parsed_date.year <= 2030:
                 return parsed_date.strftime('%Y-%m-%d')
                 
         except ValueError:
@@ -246,6 +255,8 @@ def standardize_date_format(date_str: str) -> Optional[str]:
         r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})',  # MM/DD/YY or MM/DD/YYYY
         r'(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})',     # YYYY/MM/DD
         r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})',  # DD/MM/YY or DD/MM/YYYY
+        r'(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})',            # MM DD YY or MM DD YYYY
+        r'(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})',            # DD MM YY or DD MM YYYY
     ]
     
     for pattern in date_patterns:
@@ -263,7 +274,7 @@ def standardize_date_format(date_str: str) -> Optional[str]:
                     year = year + 2000 if year <= 30 else year + 1900
                 
                 # Validate ranges
-                if 1 <= month <= 12 and 1 <= day <= 31 and 2020 <= year <= 2030:
+                if 1 <= month <= 12 and 1 <= day <= 31 and 1900 <= year <= 2030:
                     try:
                         parsed_date = date(year, month, day)
                         return parsed_date.strftime('%Y-%m-%d')

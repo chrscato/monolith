@@ -38,6 +38,7 @@ def get_approved_unpaid_bills(limit: Optional[int] = None) -> List[Dict[str, Any
             SELECT 
                 pb.*,
                 o.Order_ID,
+                o.FileMaker_Record_Number,
                 o.PatientName,
                 o.Patient_First_Name,
                 o.Patient_Last_Name,
@@ -87,6 +88,15 @@ def get_approved_unpaid_bills(limit: Optional[int] = None) -> List[Dict[str, Any
             
         cursor.execute(query)
         bills = [dict(row) for row in cursor.fetchall()]
+        
+        # Debug logging
+        if bills:
+            logger.debug("Sample bill data:")
+            sample_bill = bills[0]
+            logger.debug(f"Provider fields in first bill:")
+            logger.debug(f"provider_name: {sample_bill.get('provider_name')}")
+            logger.debug(f"provider_tin: {sample_bill.get('provider_tin')}")
+            logger.debug(f"provider_npi: {sample_bill.get('provider_npi')}")
         
         logger.info(f"Found {len(bills)} approved unpaid bills")
         return bills
@@ -150,15 +160,22 @@ def validate_bill_completeness(bill: Dict[str, Any]) -> Dict[str, Any]:
         'bill_id': bill.get('id')
     }
     
+    # Debug logging
+    logger.debug(f"Validating bill {bill.get('id')}")
+    logger.debug("Provider fields received:")
+    logger.debug(f"provider_name: {bill.get('provider_name')}")
+    logger.debug(f"provider_tin: {bill.get('provider_tin')}")
+    logger.debug(f"provider_npi: {bill.get('provider_npi')}")
+    
     # Required bill fields
     required_bill_fields = {
         'id': 'Bill ID',
         'claim_id': 'Claim ID',
-        'patient_name': 'Patient Name',
+        'PatientName': 'Patient Name',
         'total_charge': 'Total Charge',
-        'billing_provider_name': 'Billing Provider Name',
-        'billing_provider_tin': 'Provider TIN',
-        'billing_provider_npi': 'Provider NPI'
+        'provider_name': 'Billing Provider Name',
+        'provider_tin': 'Provider TIN',
+        'provider_npi': 'Provider NPI'
     }
     
     # Required order fields
@@ -183,6 +200,7 @@ def validate_bill_completeness(bill: Dict[str, Any]) -> Dict[str, Any]:
     for field, display_name in all_required_fields.items():
         value = bill.get(field)
         if not value or (isinstance(value, str) and value.strip() == ''):
+            logger.debug(f"Missing or empty field: {field} (display name: {display_name})")
             validation_result['missing_fields'].append(display_name)
             validation_result['is_valid'] = False
     
