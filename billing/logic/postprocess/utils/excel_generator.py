@@ -9,7 +9,10 @@ import logging
 import re
 from decimal import Decimal
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Get the absolute path to the monolith root directory
 DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
@@ -33,6 +36,7 @@ class ExcelBatchGenerator:
         self.historical_excel_path = historical_excel_path
         self.historical_df = None
         self.us_holidays = None
+        self.current_batch_keys = set()  # Track keys from current batch
         self._load_historical_data()
         self._init_holidays()
     
@@ -96,7 +100,12 @@ class ExcelBatchGenerator:
             cpt_string = ','.join(cpts)
             
             full_key = f"{fm_record}|{cpt_string}"
-            logger.debug(f"Created duplicate key: {full_key}")
+            
+            # Log detailed information about key creation
+            logger.info(f"Creating duplicate key for bill {bill.get('id')}:")
+            logger.info(f"  FileMaker Record: {fm_record}")
+            logger.info(f"  CPT codes: {cpts}")
+            logger.info(f"  Generated key: {full_key}")
             
             return full_key
             
@@ -106,7 +115,7 @@ class ExcelBatchGenerator:
     
     def check_duplicate(self, full_duplicate_key: str) -> bool:
         """
-        Check if Full Duplicate Key exists in historical data.
+        Check if Full Duplicate Key exists in historical data or current batch.
         
         Args:
             full_duplicate_key: The duplicate key to check
@@ -114,17 +123,42 @@ class ExcelBatchGenerator:
         Returns:
             True if duplicate exists, False otherwise
         """
-        if self.historical_df.empty:
+        if self.historical_df.empty and not self.current_batch_keys:
             return False
         
         # Check if key exists in historical data
         existing_keys = self.historical_df['Full Duplicate Key'].fillna('').tolist()
-        is_duplicate = full_duplicate_key in existing_keys
+        
+        # Log detailed information about the check
+        logger.info(f"Checking duplicate key: {full_duplicate_key}")
+        logger.info(f"Current batch keys: {list(self.current_batch_keys)}")
+        logger.info(f"Historical keys count: {len(existing_keys)}")
+        
+        # Check historical data
+        historical_match = full_duplicate_key in existing_keys
+        if historical_match:
+            # Find the matching row in historical data
+            matching_row = self.historical_df[self.historical_df['Full Duplicate Key'] == full_duplicate_key].iloc[0]
+            row_num = self.historical_df[self.historical_df['Full Duplicate Key'] == full_duplicate_key].index[0] + 1  # +1 for 1-based indexing
+            logger.info(f"Found match in historical data at row {row_num}:")
+            logger.info(f"  EOBR Number: {matching_row['EOBR Number']}")
+            logger.info(f"  Bill Date: {matching_row['Bill Date']}")
+            logger.info(f"  Amount: ${matching_row['Amount']:.2f}")
+            logger.info(f"  Description: {matching_row['Description']}")
+        
+        # Check current batch
+        current_batch_match = full_duplicate_key in self.current_batch_keys
+        if current_batch_match:
+            logger.info(f"Found match in current batch: {full_duplicate_key}")
+        
+        is_duplicate = historical_match or current_batch_match
         
         if is_duplicate:
             logger.info(f"Duplicate found: {full_duplicate_key}")
         else:
             logger.debug(f"No duplicate found for: {full_duplicate_key}")
+            # Add to current batch keys for future checks
+            self.current_batch_keys.add(full_duplicate_key)
         
         return is_duplicate
     
@@ -512,6 +546,9 @@ class ExcelBatchGenerator:
         try:
             logger.info(f"Generating Excel batch for {len(bills)} bills")
             
+            # Reset current batch keys for new batch
+            self.current_batch_keys.clear()
+            
             # Create Excel rows
             excel_rows = []
             duplicate_count = 0
@@ -602,6 +639,10 @@ def generate_excel_batch(bills: List[Dict[str, Any]],
     Returns:
         Tuple of (batch_excel_path, summary_dict)
     """
+    # Set up logging for this run
+    logging.basicConfig(level=logging.INFO)
+    logger.setLevel(logging.INFO)
+    
     generator = ExcelBatchGenerator(historical_excel_path)
     batch_excel_path, new_count, dup_count = generator.generate_batch_excel(bills, batch_output_dir)
     summary = generator.get_batch_summary(batch_excel_path)
