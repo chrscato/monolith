@@ -437,27 +437,51 @@ def validate_line_items_completeness(line_items: List[Dict[str, Any]]) -> Dict[s
             item_issues.append("Missing allowed_amount (rate not applied)")
         
         # Validate charge_amount and allowed_amount are numeric and positive
-        try:
-            charge = float(item.get('charge_amount', 0))
-            if charge <= 0:
-                item_issues.append("Charge amount must be positive")
-        except (ValueError, TypeError):
-            item_issues.append("Invalid charge amount format")
+        charge_amount = item.get('charge_amount')
+        allowed_amount = item.get('allowed_amount')
         
-        try:
-            allowed = float(item.get('allowed_amount', 0))
-            if allowed < 0:
-                item_issues.append("Allowed amount cannot be negative")
-        except (ValueError, TypeError):
-            item_issues.append("Invalid allowed amount format")
+        if charge_amount is not None:
+            try:
+                charge = float(charge_amount)
+                if charge <= 0:
+                    item_issues.append("Charge amount must be positive")
+            except (ValueError, TypeError):
+                item_issues.append("Invalid charge amount format")
+        else:
+            item_issues.append("Missing charge amount")
+        
+        if allowed_amount is not None:
+            try:
+                allowed = float(allowed_amount)
+                if allowed < 0:
+                    item_issues.append("Allowed amount cannot be negative")
+            except (ValueError, TypeError):
+                item_issues.append("Invalid allowed amount format")
+        else:
+            item_issues.append("Missing allowed amount")
+            
+        # Validate charge_amount is not less than allowed_amount
+        if charge_amount is not None and allowed_amount is not None:
+            try:
+                charge = float(charge_amount)
+                allowed = float(allowed_amount)
+                if charge < allowed:
+                    item_issues.append(f"Charge amount (${charge:.2f}) is less than allowed amount (${allowed:.2f})")
+            except (ValueError, TypeError):
+                # Skip this check if we couldn't convert to float
+                pass
         
         # Validate units
-        try:
-            units = int(item.get('units', 0))
-            if units <= 0:
-                item_issues.append("Units must be positive")
-        except (ValueError, TypeError):
-            item_issues.append("Invalid units format")
+        units = item.get('units')
+        if units is not None:
+            try:
+                units_int = int(units)
+                if units_int <= 0:
+                    item_issues.append("Units must be positive")
+            except (ValueError, TypeError):
+                item_issues.append("Invalid units format")
+        else:
+            item_issues.append("Missing units")
         
         # If there are issues with this line item, record them
         if item_issues:
@@ -487,16 +511,16 @@ def match_bill_to_order_line_items(bill_line_items: List[Dict[str, Any]],
     unmatched_order_items = order_line_items.copy()
     
     for bill_item in bill_line_items:
-        bill_cpt = bill_item.get('cpt_code', '').strip()
-        bill_dos = bill_item.get('date_of_service', '').strip()
-        bill_modifier = bill_item.get('modifier', '').strip()
+        bill_cpt = str(bill_item.get('cpt_code', '')).strip()
+        bill_dos = str(bill_item.get('date_of_service', '') or '').strip()
+        bill_modifier = str(bill_item.get('modifier', '') or '').strip()
         
         # Find matching order line item
         matched = False
         for i, order_item in enumerate(unmatched_order_items):
-            order_cpt = order_item.get('cpt_code', '').strip()
-            order_dos = order_item.get('date_of_service', '').strip()
-            order_modifier = order_item.get('modifier', '').strip()
+            order_cpt = str(order_item.get('cpt_code', '')).strip()
+            order_dos = str(order_item.get('date_of_service', '') or '').strip()
+            order_modifier = str(order_item.get('modifier', '') or '').strip()
             
             # Match on CPT, date of service, and modifier
             if (bill_cpt == order_cpt and 
@@ -515,8 +539,8 @@ def match_bill_to_order_line_items(bill_line_items: List[Dict[str, Any]],
         if not matched:
             # Try looser matching (CPT and date only)
             for i, order_item in enumerate(unmatched_order_items):
-                order_cpt = order_item.get('cpt_code', '').strip()
-                order_dos = order_item.get('date_of_service', '').strip()
+                order_cpt = str(order_item.get('cpt_code', '')).strip()
+                order_dos = str(order_item.get('date_of_service', '') or '').strip()
                 
                 if bill_cpt == order_cpt and bill_dos == order_dos:
                     matches.append({
@@ -544,6 +568,7 @@ def match_bill_to_order_line_items(bill_line_items: List[Dict[str, Any]],
             'unmatched_order': len(unmatched_order_items)
         }
     }
+
 
 def validate_bill_data(bills: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -664,7 +689,16 @@ def print_validation_summary(validation_report: Dict[str, Any]):
         print("Basic Information:")
         print(f"  Patient Name: {bill_data.get('PatientName', 'N/A')}")
         print(f"  Claim ID: {bill_data.get('claim_id', 'N/A')}")
-        print(f"  Total Charge: ${bill_data.get('total_charge', 0):.2f}")
+        
+        # Safe handling of total_charge
+        total_charge = bill_data.get('total_charge')
+        if total_charge is not None:
+            try:
+                print(f"  Total Charge: ${float(total_charge):.2f}")
+            except (ValueError, TypeError):
+                print(f"  Total Charge: {total_charge}")
+        else:
+            print("  Total Charge: N/A")
         
         print("\nProvider Information:")
         print(f"  Provider Name: {bill_data.get('provider_name', 'N/A')}")
@@ -678,8 +712,27 @@ def print_validation_summary(validation_report: Dict[str, Any]):
             for item in line_items:
                 print(f"  CPT: {item.get('cpt_code', 'N/A')}")
                 print(f"    Date of Service: {item.get('date_of_service', 'N/A')}")
-                print(f"    Charge Amount: ${item.get('charge_amount', 0):.2f}")
-                print(f"    Allowed Amount: ${item.get('allowed_amount', 0):.2f}")
+                
+                # Safe handling of charge_amount
+                charge_amount = item.get('charge_amount')
+                if charge_amount is not None:
+                    try:
+                        print(f"    Charge Amount: ${float(charge_amount):.2f}")
+                    except (ValueError, TypeError):
+                        print(f"    Charge Amount: {charge_amount}")
+                else:
+                    print("    Charge Amount: N/A")
+                
+                # Safe handling of allowed_amount
+                allowed_amount = item.get('allowed_amount')
+                if allowed_amount is not None:
+                    try:
+                        print(f"    Allowed Amount: ${float(allowed_amount):.2f}")
+                    except (ValueError, TypeError):
+                        print(f"    Allowed Amount: {allowed_amount}")
+                else:
+                    print("    Allowed Amount: N/A")
+                
                 print(f"    Units: {item.get('units', 'N/A')}")
                 print(f"    Modifier: {item.get('modifier', 'N/A')}")
                 print(f"    Decision: {item.get('decision', 'N/A')}")
@@ -694,7 +747,17 @@ def print_validation_summary(validation_report: Dict[str, Any]):
             for item in order_line_items:
                 print(f"  CPT: {item.get('cpt_code', 'N/A')}")
                 print(f"    Date of Service: {item.get('date_of_service', 'N/A')}")
-                print(f"    Charge Amount: ${float(item.get('charge_amount', 0)):.2f}")
+                
+                # Safe handling of charge_amount for order items
+                charge_amount = item.get('charge_amount')
+                if charge_amount is not None:
+                    try:
+                        print(f"    Charge Amount: ${float(charge_amount):.2f}")
+                    except (ValueError, TypeError):
+                        print(f"    Charge Amount: {charge_amount}")
+                else:
+                    print("    Charge Amount: N/A")
+                
                 print(f"    Units: {item.get('units', 'N/A')}")
                 print(f"    BR_paid: {item.get('BR_paid', 'N/A')}")
                 print(f"    BILL_REVIEWED: {item.get('BILL_REVIEWED', 'N/A')}")
@@ -743,6 +806,7 @@ def print_validation_summary(validation_report: Dict[str, Any]):
                     print(f"    CPT {cpt}: {issues}")
     
     print("\n" + "=" * 60)
+    
 
 if __name__ == "__main__":
     # Test the validation functions

@@ -31,7 +31,7 @@ class ExcelBatchGenerator:
             historical_excel_path: Path to the Historical_EOBR_Data.xlsx file
         """
         if historical_excel_path is None:
-            historical_excel_path = Path("data/batch_outputs/Historical_EOBR_Data.xlsx")
+            historical_excel_path = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\billing\logic\postprocess\batch_outputs\Historical_EOBR_Data copy.xlsx")
         
         self.historical_excel_path = historical_excel_path
         self.historical_df = None
@@ -44,20 +44,55 @@ class ExcelBatchGenerator:
         """Load historical Excel data or create empty DataFrame."""
         try:
             if self.historical_excel_path.exists():
-                self.historical_df = pd.read_excel(self.historical_excel_path)
+                # Read Excel with explicit dtype handling for numeric columns
+                self.historical_df = pd.read_excel(
+                    self.historical_excel_path,
+                    dtype={
+                        'Release Payment': 'str',
+                        'Duplicate Check': 'str', 
+                        'Full Duplicate Key': 'str',
+                        'Input File': 'str',
+                        'EOBR Number': 'str',
+                        'Vendor': 'str',
+                        'Mailing Address': 'str',
+                        'Terms': 'str',
+                        'Bill Date': 'str',
+                        'Due Date': 'str',
+                        'Category': 'str',
+                        'Description': 'str',
+                        'Memo': 'str'
+                        # Amount and Total will be converted below
+                    }
+                )
+                
+                # Convert Amount and Total columns to numeric, handling any errors
+                for col in ['Amount', 'Total']:
+                    if col in self.historical_df.columns:
+                        self.historical_df[col] = pd.to_numeric(
+                            self.historical_df[col], 
+                            errors='coerce'  # Convert invalid values to NaN
+                        ).fillna(0.0)  # Replace NaN with 0.0
+                
                 logger.info(f"Loaded historical data: {len(self.historical_df)} records")
+                
+                # Log column types for debugging
+                logger.debug("Historical data column types:")
+                for col, dtype in self.historical_df.dtypes.items():
+                    logger.debug(f"  {col}: {dtype}")
+                    
             else:
                 logger.info("Historical file not found, creating new DataFrame")
                 self._create_empty_historical_df()
+                
         except Exception as e:
             logger.error(f"Error loading historical data: {str(e)}")
             self._create_empty_historical_df()
     
     def _create_empty_historical_df(self):
-        """Create empty DataFrame with required columns."""
+        """Create empty DataFrame with required columns including Order ID."""
         columns = [
             'Release Payment', 'Duplicate Check', 'Full Duplicate Key',
-            'Input File', 'EOBR Number', 'Vendor', 'Mailing Address',
+            'Input File', 'Order ID', 'EOBR Number', 'Vendor', 'Mailing Address',
             'Terms', 'Bill Date', 'Due Date', 'Category', 'Description',
             'Amount', 'Memo', 'Total'
         ]
@@ -69,22 +104,56 @@ class ExcelBatchGenerator:
         self.us_holidays = holidays.UnitedStates(years=range(current_year, current_year + 2))
         logger.debug(f"Initialized holidays for years {current_year}-{current_year + 1}")
     
-    def create_duplicate_key(self, bill: Dict[str, Any]) -> str:
+    def validate_bill_for_processing(self, bill: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Create Full Duplicate Key from FileMaker_Record_Number and CPT codes.
+        Validate that a bill has all required fields for processing.
         
         Args:
-            bill: Bill dictionary with line_items
+            bill: Bill dictionary
             
         Returns:
-            Full Duplicate Key in format: "FM_RECORD|CPT1,CPT2,CPT3"
+            Tuple of (is_valid, error_message)
+        """
+        required_fields = ['order_id', 'FileMaker_Record_Number', 'PatientName', 'line_items']
+        
+        for field in required_fields:
+            if field not in bill or not bill[field]:
+                return False, f"Missing required field: {field}"
+        
+        # Validate line_items structure
+        line_items = bill.get('line_items', [])
+        if not isinstance(line_items, list) or len(line_items) == 0:
+            return False, "line_items must be a non-empty list"
+        
+        # Validate each line item has required fields
+        for i, item in enumerate(line_items):
+            if not isinstance(item, dict):
+                return False, f"line_items[{i}] must be a dictionary"
+            
+            if 'cpt_code' not in item or not item['cpt_code']:
+                return False, f"line_items[{i}] missing cpt_code"
+            
+            if 'allowed_amount' not in item:
+                return False, f"line_items[{i}] missing allowed_amount"
+        
+        return True, ""
+
+    def create_duplicate_key(self, bill: Dict[str, Any]) -> str:
+        """
+        Create Full Duplicate Key from order_id and CPT codes.
+        
+        Args:
+            bill: Bill dictionary with order_id and line_items
+            
+        Returns:
+            Full Duplicate Key in format: "ORDER_ID|CPT1,CPT2,CPT3"
         """
         try:
-            # Get FileMaker Record Number from order data
-            fm_record = bill.get('FileMaker_Record_Number', '')
-            if not fm_record:
-                logger.warning(f"No FileMaker_Record_Number found for bill {bill.get('id')}")
-                fm_record = 'UNKNOWN'
+            # Get order_id
+            order_id = bill.get('order_id', '')
+            if not order_id:
+                logger.warning(f"No order_id found for bill {bill.get('id')}")
+                order_id = 'UNKNOWN'
             
             # Get all CPT codes from line items
             line_items = bill.get('line_items', [])
@@ -99,11 +168,11 @@ class ExcelBatchGenerator:
             cpts.sort()
             cpt_string = ','.join(cpts)
             
-            full_key = f"{fm_record}|{cpt_string}"
+            full_key = f"{order_id}|{cpt_string}"
             
             # Log detailed information about key creation
             logger.info(f"Creating duplicate key for bill {bill.get('id')}:")
-            logger.info(f"  FileMaker Record: {fm_record}")
+            logger.info(f"  Order ID: {order_id}")
             logger.info(f"  CPT codes: {cpts}")
             logger.info(f"  Generated key: {full_key}")
             
@@ -112,55 +181,81 @@ class ExcelBatchGenerator:
         except Exception as e:
             logger.error(f"Error creating duplicate key for bill {bill.get('id')}: {str(e)}")
             return f"ERROR_{bill.get('id', 'UNKNOWN')}|"
-    
-    def check_duplicate(self, full_duplicate_key: str) -> bool:
+
+    def enhanced_duplicate_check(self, full_duplicate_key: str, bill: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Check if Full Duplicate Key exists in historical data or current batch.
+        Enhanced duplicate check using order_id + CPT combinations.
+        Only checks for exact duplicates and same order_id with different CPTs.
         
         Args:
-            full_duplicate_key: The duplicate key to check
+            full_duplicate_key: The primary duplicate key to check
+            bill: The current bill being processed
             
         Returns:
-            True if duplicate exists, False otherwise
+            Tuple of (is_duplicate, duplicate_type)
+            duplicate_type can be: "exact", "same_order_different_cpts", "none"
         """
         if self.historical_df.empty and not self.current_batch_keys:
-            return False
+            return False, "none"
         
-        # Check if key exists in historical data
-        existing_keys = self.historical_df['Full Duplicate Key'].fillna('').tolist()
+        current_order_id = bill.get('order_id', '').strip()
         
-        # Log detailed information about the check
-        logger.info(f"Checking duplicate key: {full_duplicate_key}")
-        logger.info(f"Current batch keys: {list(self.current_batch_keys)}")
-        logger.info(f"Historical keys count: {len(existing_keys)}")
+        logger.info(f"Enhanced duplicate check for key: {full_duplicate_key}")
+        logger.info(f"Current order_id: {current_order_id}")
         
-        # Check historical data
-        historical_match = full_duplicate_key in existing_keys
-        if historical_match:
-            # Find the matching row in historical data
+        # Check exact duplicate first (order_id + CPT combination)
+        existing_keys = []
+        if not self.historical_df.empty and 'Full Duplicate Key' in self.historical_df.columns:
+            existing_keys = self.historical_df['Full Duplicate Key'].fillna('').tolist()
+        
+        # Check historical data for exact match
+        historical_exact_match = full_duplicate_key in existing_keys
+        if historical_exact_match:
             matching_row = self.historical_df[self.historical_df['Full Duplicate Key'] == full_duplicate_key].iloc[0]
-            row_num = self.historical_df[self.historical_df['Full Duplicate Key'] == full_duplicate_key].index[0] + 1  # +1 for 1-based indexing
-            logger.info(f"Found match in historical data at row {row_num}:")
+            row_num = self.historical_df[self.historical_df['Full Duplicate Key'] == full_duplicate_key].index[0] + 1
+            logger.info(f"Found EXACT duplicate in historical data at row {row_num}:")
             logger.info(f"  EOBR Number: {matching_row['EOBR Number']}")
-            logger.info(f"  Bill Date: {matching_row['Bill Date']}")
-            logger.info(f"  Amount: ${matching_row['Amount']:.2f}")
+            logger.info(f"  Order ID: {matching_row.get('Order ID', 'N/A')}")
             logger.info(f"  Description: {matching_row['Description']}")
+            
+            # Safely handle Amount formatting
+            try:
+                amount_value = float(matching_row['Amount'])
+                logger.info(f"  Amount: ${amount_value:.2f}")
+            except (ValueError, TypeError):
+                logger.info(f"  Amount: {matching_row['Amount']} (could not format as currency)")
+            
+            return True, "exact"
         
-        # Check current batch
-        current_batch_match = full_duplicate_key in self.current_batch_keys
-        if current_batch_match:
-            logger.info(f"Found match in current batch: {full_duplicate_key}")
+        # Check current batch for exact match
+        current_batch_exact_match = full_duplicate_key in self.current_batch_keys
+        if current_batch_exact_match:
+            logger.info(f"Found EXACT duplicate in current batch")
+            return True, "exact"
         
-        is_duplicate = historical_match or current_batch_match
+        # Enhanced check: Look for same order_id with different CPT combinations
+        if current_order_id:
+            logger.info(f"Checking for same order_id with different CPTs...")
+            
+            # Check historical data for same order_id
+            if not self.historical_df.empty and 'Order ID' in self.historical_df.columns:
+                same_order_matches = self.historical_df[
+                    self.historical_df['Order ID'] == current_order_id
+                ]
+                
+                if not same_order_matches.empty:
+                    logger.warning(f"Found {len(same_order_matches)} records with same order_id but different CPTs:")
+                    for idx, match_row in same_order_matches.iterrows():
+                        logger.warning(f"  Row {idx + 1}: {match_row.get('Full Duplicate Key', 'N/A')}")
+                        logger.warning(f"    EOBR: {match_row.get('EOBR Number', 'N/A')}")
+                    
+                    # This is a yellow flag - same order but different services
+                    return True, "same_order_different_cpts"
         
-        if is_duplicate:
-            logger.info(f"Duplicate found: {full_duplicate_key}")
-        else:
-            logger.debug(f"No duplicate found for: {full_duplicate_key}")
-            # Add to current batch keys for future checks
-            self.current_batch_keys.add(full_duplicate_key)
-        
-        return is_duplicate
+        # No duplicates found
+        logger.debug(f"No duplicates found for: {full_duplicate_key}")
+        self.current_batch_keys.add(full_duplicate_key)
+        return False, "none"
     
     def get_next_eobr_number(self, fm_record_number: str) -> str:
         """
@@ -384,7 +479,7 @@ class ExcelBatchGenerator:
     
     def format_description(self, bill: Dict[str, Any], bill_date: str) -> str:
         """
-        Format description field: dates, CPTs, patient name, FM record.
+        Format description field: dates, CPTs, patient name, order_id.
         
         Args:
             bill: Bill dictionary
@@ -416,10 +511,10 @@ class ExcelBatchGenerator:
             if patient_name:
                 description_parts.append(patient_name)
             
-            # Add FileMaker Record Number
-            fm_record = bill.get('FileMaker_Record_Number', '').strip()
-            if fm_record:
-                description_parts.append(fm_record)
+            # Add Order ID
+            order_id = bill.get('order_id', '').strip()
+            if order_id:
+                description_parts.append(order_id)
             
             description = ', '.join(description_parts)
             logger.debug(f"Formatted description: {description}")
@@ -463,10 +558,10 @@ class ExcelBatchGenerator:
     
     def create_excel_row(self, bill: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Create a single Excel row for a bill.
+        Create a single Excel row for a bill with order_id-based duplicate detection.
         
         Args:
-            bill: Bill dictionary with all required data
+            bill: Bill dictionary with all required data (must include order_id AND FileMaker_Record_Number)
             
         Returns:
             Dictionary representing one Excel row
@@ -474,14 +569,25 @@ class ExcelBatchGenerator:
         try:
             logger.info(f"Processing bill {bill.get('id')} for Excel generation")
             
-            # Create duplicate key
+            # Validate that we have both order_id and FileMaker_Record_Number
+            order_id = bill.get('order_id', '').strip()
+            fm_record = bill.get('FileMaker_Record_Number', '').strip()
+            
+            if not order_id:
+                logger.error(f"Bill {bill.get('id')} missing order_id - cannot process")
+                raise ValueError(f"Bill {bill.get('id')} missing required order_id")
+            
+            if not fm_record:
+                logger.error(f"Bill {bill.get('id')} missing FileMaker_Record_Number - cannot create EOBR")
+                raise ValueError(f"Bill {bill.get('id')} missing required FileMaker_Record_Number")
+            
+            # Create duplicate key (using order_id)
             full_duplicate_key = self.create_duplicate_key(bill)
             
-            # Check for duplicate
-            is_duplicate = self.check_duplicate(full_duplicate_key)
+            # Enhanced duplicate check
+            is_duplicate, duplicate_type = self.enhanced_duplicate_check(full_duplicate_key, bill)
             
-            # Get EOBR number
-            fm_record = bill.get('FileMaker_Record_Number', '')
+            # Get EOBR number (using FileMaker_Record_Number)
             eobr_number = self.get_next_eobr_number(fm_record)
             
             # Get earliest service date
@@ -500,13 +606,27 @@ class ExcelBatchGenerator:
             description = self.format_description(bill, bill_date)
             memo = self.format_memo(bill, bill_date)
             
-            # Create Excel row
+            # Determine release payment and duplicate check based on duplicate type
+            if duplicate_type == "exact":
+                release_payment = "N"
+                duplicate_check = "Y"
+                logger.info(f"Bill marked as EXACT duplicate - will not be released")
+            elif duplicate_type == "same_order_different_cpts":
+                release_payment = "REVIEW"  # Changed from "Y" to "REVIEW" for manual review
+                duplicate_check = "YELLOW"  # Special flag for manual review
+                logger.warning(f"Bill marked for manual review - same order_id with different CPTs")
+            else:
+                release_payment = "Y"
+                duplicate_check = "N"
+            
+            # Create Excel row (INCLUDING ORDER ID)
             excel_row = {
-                'Release Payment': 'N' if is_duplicate else 'Y',
-                'Duplicate Check': 'Y' if is_duplicate else 'N',
+                'Release Payment': release_payment,
+                'Duplicate Check': duplicate_check,
                 'Full Duplicate Key': full_duplicate_key,
                 'Input File': bill.get('id', ''),
-                'EOBR Number': eobr_number,
+                'Order ID': order_id,
+                'EOBR Number': eobr_number,  # Still based on FileMaker_Record_Number
                 'Vendor': vendor,
                 'Mailing Address': mailing_address,
                 'Terms': 'Net 45',
@@ -520,18 +640,18 @@ class ExcelBatchGenerator:
             }
             
             logger.info(f"Created Excel row for bill {bill.get('id')}: "
-                       f"Amount=${total_amount:.2f}, Duplicate={is_duplicate}")
+                       f"Order ID={order_id}, EOBR={eobr_number}, Amount=${total_amount:.2f}, Duplicate={duplicate_check}")
             
             return excel_row
             
         except Exception as e:
             logger.error(f"Error creating Excel row for bill {bill.get('id')}: {str(e)}")
             raise
-    
+
     def generate_batch_excel(self, 
-                           bills: List[Dict[str, Any]], 
-                           batch_output_dir: Path,
-                           batch_filename: str = "batch_payment_data.xlsx") -> Tuple[Path, int, int]:
+                        bills: List[Dict[str, Any]], 
+                        batch_output_dir: Path,
+                        batch_filename: str = "batch_payment_data.xlsx") -> Tuple[Path, int, int, int]:
         """
         Generate batch Excel file and update historical data.
         
@@ -541,7 +661,7 @@ class ExcelBatchGenerator:
             batch_filename: Name of the batch Excel file
             
         Returns:
-            Tuple of (batch_excel_path, new_records_count, duplicate_count)
+            Tuple of (batch_excel_path, new_records_count, duplicate_count, yellow_count)
         """
         try:
             logger.info(f"Generating Excel batch for {len(bills)} bills")
@@ -552,6 +672,7 @@ class ExcelBatchGenerator:
             # Create Excel rows
             excel_rows = []
             duplicate_count = 0
+            yellow_count = 0
             
             for bill in bills:
                 row = self.create_excel_row(bill)
@@ -559,22 +680,26 @@ class ExcelBatchGenerator:
                 
                 if row['Duplicate Check'] == 'Y':
                     duplicate_count += 1
+                elif row['Duplicate Check'] == 'YELLOW':
+                    yellow_count += 1
             
-            new_records_count = len(excel_rows) - duplicate_count
+            new_records_count = len(excel_rows) - duplicate_count  # Yellow records are still processed
             
             # Create DataFrame
             batch_df = pd.DataFrame(excel_rows)
             
-            # Save batch Excel file
+            # Save batch Excel file with conditional formatting
             excel_dir = batch_output_dir / "excel"
             excel_dir.mkdir(parents=True, exist_ok=True)
             batch_excel_path = excel_dir / batch_filename
             
-            batch_df.to_excel(batch_excel_path, index=False)
+            # Save with formatting
+            self._save_excel_with_formatting(batch_df, batch_excel_path)
+            
             logger.info(f"Saved batch Excel file: {batch_excel_path}")
             
-            # Update historical data with new records only
-            new_records = batch_df[batch_df['Duplicate Check'] == 'N'].copy()
+            # Update historical data with new records only (excluding exact duplicates)
+            new_records = batch_df[batch_df['Duplicate Check'] != 'Y'].copy()
             
             if not new_records.empty:
                 # Append to historical DataFrame
@@ -588,17 +713,66 @@ class ExcelBatchGenerator:
                 logger.info("No new records to add to historical file")
             
             logger.info(f"Excel generation complete: {len(excel_rows)} total, "
-                       f"{new_records_count} new, {duplicate_count} duplicates")
+                    f"{new_records_count} new, {duplicate_count} exact duplicates, "
+                    f"{yellow_count} same order different CPTs warnings")
             
-            return batch_excel_path, new_records_count, duplicate_count
+            return batch_excel_path, new_records_count, duplicate_count, yellow_count
             
         except Exception as e:
             logger.error(f"Error generating batch Excel: {str(e)}")
             raise
-    
+
+    def _save_excel_with_formatting(self, df: pd.DataFrame, file_path: Path):
+        """
+        Save Excel file with conditional formatting for yellow warnings.
+        
+        Args:
+            df: DataFrame to save
+            file_path: Path to save the Excel file
+        """
+        try:
+            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Batch')
+                
+                # Get the workbook and worksheet
+                workbook = writer.book
+                worksheet = writer.sheets['Batch']
+                
+                # Add conditional formatting for yellow warnings
+                try:
+                    from openpyxl.styles import PatternFill
+                    
+                    # Yellow fill for YELLOW duplicate check
+                    yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+                    
+                    # Apply to rows where Duplicate Check = "YELLOW"
+                    duplicate_check_col = None
+                    for col_idx, col_name in enumerate(df.columns, 1):
+                        if col_name == 'Duplicate Check':
+                            duplicate_check_col = col_idx
+                            break
+                    
+                    if duplicate_check_col:
+                        for row_num, (_, row_data) in enumerate(df.iterrows(), start=2):  # Start at 2 to skip header
+                            if row_data['Duplicate Check'] == 'YELLOW':
+                                for col_num in range(1, len(df.columns) + 1):
+                                    worksheet.cell(row=row_num, column=col_num).fill = yellow_fill
+                    
+                    logger.info(f"Applied conditional formatting to {len(df[df['Duplicate Check'] == 'YELLOW'])} yellow rows")
+                    
+                except ImportError:
+                    logger.warning("openpyxl not available for conditional formatting")
+                except Exception as e:
+                    logger.warning(f"Could not apply conditional formatting: {str(e)}")
+        
+        except Exception as e:
+            # Fallback to basic save if formatting fails
+            logger.warning(f"Conditional formatting failed, saving basic Excel: {str(e)}")
+            df.to_excel(file_path, index=False)
+
     def get_batch_summary(self, batch_excel_path: Path) -> Dict[str, Any]:
         """
-        Get summary information about a generated batch.
+        Get summary information about a generated batch with enhanced duplicate info.
         
         Args:
             batch_excel_path: Path to the batch Excel file
@@ -613,6 +787,7 @@ class ExcelBatchGenerator:
                 'total_records': len(batch_df),
                 'new_records': len(batch_df[batch_df['Duplicate Check'] == 'N']),
                 'duplicate_records': len(batch_df[batch_df['Duplicate Check'] == 'Y']),
+                'yellow_warnings': len(batch_df[batch_df['Duplicate Check'] == 'YELLOW']),
                 'total_amount': batch_df['Amount'].sum(),
                 'release_amount': batch_df[batch_df['Release Payment'] == 'Y']['Amount'].sum(),
                 'batch_file': str(batch_excel_path),
@@ -629,7 +804,7 @@ def generate_excel_batch(bills: List[Dict[str, Any]],
                         batch_output_dir: Path,
                         historical_excel_path: Path = None) -> Tuple[Path, Dict[str, Any]]:
     """
-    Convenience function to generate Excel batch and return summary.
+    Convenience function to generate Excel batch and return summary with enhanced duplicate detection.
     
     Args:
         bills: List of prepared bill dictionaries
@@ -644,7 +819,7 @@ def generate_excel_batch(bills: List[Dict[str, Any]],
     logger.setLevel(logging.INFO)
     
     generator = ExcelBatchGenerator(historical_excel_path)
-    batch_excel_path, new_count, dup_count = generator.generate_batch_excel(bills, batch_output_dir)
+    batch_excel_path, new_count, dup_count, yellow_count = generator.generate_batch_excel(bills, batch_output_dir)
     summary = generator.get_batch_summary(batch_excel_path)
     
     return batch_excel_path, summary
@@ -659,6 +834,7 @@ if __name__ == "__main__":
     test_bills = [
         {
             'id': 'BILL_001',
+            'order_id': '9A7546EF-D14D-46B2-8EE8-AB16255B4F12',
             'FileMaker_Record_Number': 'FM_12345',
             'PatientName': 'John Doe',
             'provider_billing_name': 'Test Medical Center',

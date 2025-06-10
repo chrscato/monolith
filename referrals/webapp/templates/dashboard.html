@@ -104,3 +104,86 @@
                                     <th>Received</th>
                                     <th>Action</th>
                                 </tr>
+                            </thead>
+                            <tbody>
+                                {% for referral in pending_reviews %}
+                                <tr>
+                                    <td>{{ referral.id }}</td>
+                                    <td>{{ referral.subject|truncatechars:50 }}</td>
+                                    <td>{{ referral.received_date|date:"M d, Y" }}</td>
+                                    <td>
+                                        <a href="{% url 'referrals:referral_detail' referral.id %}" class="btn btn-sm btn-primary">
+                                            Review
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{% url 'referrals:pending_reviews' %}" class="btn btn-warning">View All Pending Reviews</a>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        No referrals pending review.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Referrals Section -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Recent Referrals</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_referrals %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Subject</th>
+                                    <th>Status</th>
+                                    <th>Received</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for referral in recent_referrals %}
+                                <tr>
+                                    <td>{{ referral.id }}</td>
+                                    <td>{{ referral.subject|truncatechars:30 }}</td>
+                                    <td>
+                                        <span class="badge {% if referral.status == 'new' %}bg-primary{% elif referral.status == 'processing' %}bg-warning{% elif referral.status == 'reviewed' %}bg-success{% elif referral.status == 'completed' %}bg-secondary{% endif %}">
+                                            {{ referral.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ referral.received_date|date:"M d, Y" }}</td>
+                                    <td>
+                                        <a href="{% url 'referrals:referral_detail' referral.id %}" class="btn btn-sm btn-primary">
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{% url 'referrals:referral_list' %}" class="btn btn-primary">View All Referrals</a>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        No referrals received yet.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
