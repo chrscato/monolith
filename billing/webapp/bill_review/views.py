@@ -696,6 +696,24 @@ def dashboard(request):
         messages.error(request, "An error occurred while loading the dashboard.")
         return render(request, 'bill_review/dashboard.html', {})
 
+def normalize_date(date_str):
+    if not date_str:
+        return None
+    try:
+        # Handle date range format (e.g., "04/04/2025-04/04/2025")
+        if '-' in date_str:
+            date_str = date_str.split('-')[0].strip()
+        
+        # Try different date formats
+        for fmt in ['%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d']:
+            try:
+                return datetime.strptime(date_str, fmt).strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        return None
+    except Exception:
+        return None
+
 def bill_detail(request, bill_id):
     """Show comprehensive details for a bill with all data needed for manual review."""
     try:
@@ -929,6 +947,11 @@ def bill_detail(request, bill_id):
             columns = [col[0] for col in cursor.description]
             bill_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
             
+            # Normalize dates for each line item
+            for item in bill_items:
+                if 'date_of_service' in item:
+                    item['date_of_service'] = normalize_date(item['date_of_service'])
+            
             # Get order details if claim_id exists
             order = {}
             order_items = []
@@ -955,6 +978,11 @@ def bill_detail(request, bill_id):
                     """, [bill.get('claim_id')])
                     columns = [col[0] for col in cursor.description]
                     order_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            # Normalize dates for each order line item
+            for item in order_items:
+                if 'date_of_service' in item:
+                    item['date_of_service'] = normalize_date(item['date_of_service'])
             
             # Get CPT code categories for comparisons
             cpt_codes = [item['cpt_code'] for item in bill_items if item.get('cpt_code')]
@@ -1305,7 +1333,8 @@ def line_item_update(request, line_item_id):
                             charge_amount = %s,
                             allowed_amount = %s,
                             decision = %s,
-                            reason_code = %s
+                            reason_code = %s,
+                            date_of_service = %s
                         WHERE id = %s
                     """, [
                         form.cleaned_data['cpt_code'],
@@ -1315,6 +1344,7 @@ def line_item_update(request, line_item_id):
                         form.cleaned_data['allowed_amount'],
                         form.cleaned_data['decision'],
                         form.cleaned_data['reason_code'],
+                        form.cleaned_data['date_of_service'],
                         line_item_id
                     ])
                 

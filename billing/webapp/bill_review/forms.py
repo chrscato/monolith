@@ -46,6 +46,13 @@ class LineItemUpdateForm(forms.Form):
     allowed_amount = forms.DecimalField(max_digits=10, decimal_places=2, required=False)
     decision = forms.ChoiceField(choices=DECISION_CHOICES)
     reason_code = forms.CharField(max_length=20, required=False)
+    date_of_service = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date'
+        })
+    )
 
 class OTARateForm(forms.Form):
     cpt_code = forms.CharField(

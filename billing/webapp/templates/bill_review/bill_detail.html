@@ -751,7 +751,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </td>
                                             <td>
                                                 {% if item.bill_item %}
-                                                    {{ item.bill_item.date_of_service|date:"m/d/Y" }}
+                                                    {{ item.bill_item.date_of_service }}
                                                 {% else %}
                                                     <span class="text-muted">-</span>
                                                 {% endif %}
@@ -802,7 +802,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </td>
                                             <td>
                                                 {% if item.order_item %}
-                                                    {{ item.order_item.DOS|date:"m/d/Y" }}
+                                                    {{ item.order_item.DOS }}
                                                 {% else %}
                                                     <span class="text-muted">-</span>
                                                 {% endif %}
@@ -934,7 +934,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         </span>
                                     </td>
                                     <td>{{ item.reason_code|default:"-" }}</td>
-                                    <td>{{ item.date_of_service|date:"Y-m-d" }}</td>
+                                    <td>{{ item.date_of_service }}</td>
                                     <td>
                                         <div class="btn-group">
                                             <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
@@ -989,6 +989,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                                     <div class="mb-3">
                                                         <label class="form-label">Reason Code</label>
                                                         <input type="text" name="reason_code" class="form-control" value="{{ item.reason_code|default:'' }}">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Date of Service</label>
+                                                        <input type="date" name="date_of_service" class="form-control" value="{{ item.date_of_service }}">
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">

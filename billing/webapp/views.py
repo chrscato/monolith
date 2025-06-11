@@ -266,6 +266,29 @@ class DashboardView(ListView):
         return []  # Not used, but required by ListView
 
 
+def normalize_date(date_str):
+    if not date_str:
+        return ''
+    date_str = str(date_str).strip()
+    if ' - ' in date_str:
+        date_str = date_str.split(' - ')[0].strip()
+    if ' ' in date_str:
+        date_str = date_str.split(' ')[0]
+    formats = [
+        '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y',
+        '%Y/%m/%d', '%m/%d/%y', '%m-%d-%y',
+        '%Y%m%d', '%m%d%Y', '%m%d%y'
+    ]
+    for fmt in formats:
+        try:
+            d = datetime.strptime(date_str, fmt).date()
+            if 2020 <= d.year <= 2035:
+                return d.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return ''
+
+
 def bill_detail(request, bill_id):
     """View for detailed bill information."""
     with connection.cursor() as cursor:
@@ -287,5 +310,9 @@ def bill_detail(request, bill_id):
         columns = [col[0] for col in cursor.description]
         bill = dict(zip(columns, cursor.fetchone()))
 
-    context = {"bill": bill, "line_items": get_bill_line_items(bill_id)}
+    bill_line_items = get_bill_line_items(bill_id)
+    for item in bill_line_items:
+        item['date_of_service'] = normalize_date(item.get('date_of_service', ''))
+
+    context = {"bill": bill, "line_items": bill_line_items}
     return render(request, "billing/bill_detail.html", context)
