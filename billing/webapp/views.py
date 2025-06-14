@@ -3,6 +3,9 @@ from django.db import connection
 from django.views.generic import ListView
 from datetime import datetime, timedelta
 from collections import Counter
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Define status colors and descriptions
 STATUS_METADATA = {
@@ -123,7 +126,7 @@ def get_status_distribution(filtered=False, status=None, action=None):
             MIN(created_at) as first_occurrence,
             MAX(created_at) as last_occurrence
         FROM ProviderBill
-        WHERE 1=1
+        WHERE bill_paid != 'Y'
     """
     params = []
     
@@ -137,10 +140,14 @@ def get_status_distribution(filtered=False, status=None, action=None):
             
     query += " GROUP BY status ORDER BY count DESC"
     
+    logger.info("Status Distribution Query: %s", query)
+    logger.info("Status Distribution Params: %s", params)
+    
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         columns = [col[0] for col in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        logger.info("Status Distribution Results: %s", results)
         
         # Enhance results with metadata
         for result in results:
@@ -161,6 +168,7 @@ def get_action_distribution(filtered=False, status=None, action=None):
             MAX(created_at) as last_occurrence
         FROM ProviderBill
         WHERE action IS NOT NULL
+        AND bill_paid != 'Y'
     """
     params = []
     
@@ -174,10 +182,15 @@ def get_action_distribution(filtered=False, status=None, action=None):
             
     query += " GROUP BY action ORDER BY count DESC"
     
+    logger.info("Action Distribution Query: %s", query)
+    logger.info("Action Distribution Params: %s", params)
+    
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         columns = [col[0] for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        logger.info("Action Distribution Results: %s", results)
+        return results
 
 
 def get_filtered_bills(status=None, action=None):
@@ -195,7 +208,7 @@ def get_filtered_bills(status=None, action=None):
         FROM ProviderBill pb
         LEFT JOIN orders o ON pb.claim_id = o.Order_ID
         LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
-        WHERE 1=1
+        WHERE pb.bill_paid != 'Y'
     """
     params = []
     

@@ -899,6 +899,14 @@ document.addEventListener('DOMContentLoaded', function() {
             </h2>
             <div id="billLineItems" class="accordion-collapse collapse" data-bs-parent="#billAccordion">
                 <div class="accordion-body">
+                    <!-- Add New Line Item Button -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Line Items</h5>
+                        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addLineItemModal">
+                            <i class="fas fa-plus me-1"></i>Add New Line Item
+                        </button>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
@@ -1128,5 +1136,74 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<!-- Add New Line Item Modal -->
+<div class="modal fade" id="addLineItemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Line Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'bill_review:add_line_item' bill.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">CPT Code *</label>
+                                <input type="text" name="cpt_code" class="form-control" required 
+                                       placeholder="Enter CPT code">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Modifier</label>
+                                <input type="text" name="modifier" class="form-control" 
+                                       placeholder="Optional modifier">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Units *</label>
+                                <input type="number" name="units" class="form-control" value="1" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date of Service *</label>
+                                <input type="date" name="date_of_service" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Charge Amount *</label>
+                                <input type="number" step="0.01" name="charge_amount" class="form-control" 
+                                       placeholder="0.00" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Allowed Amount</label>
+                                <input type="number" step="0.01" name="allowed_amount" class="form-control" 
+                                       placeholder="0.00">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Decision</label>
+                                <select name="decision" class="form-select" required>
+                                    <option value="pending" selected>Pending</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="reduced">Reduced</option>
+                                    <option value="denied">Denied</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Reason Code</label>
+                                <input type="text" name="reason_code" class="form-control" 
+                                       placeholder="Optional reason code">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Add Line Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

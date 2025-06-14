@@ -129,3 +129,74 @@ class BillMappingForm(forms.Form):
         }),
         help_text='Optional end date for order search'
     )
+
+class AddLineItemForm(forms.Form):
+    DECISION_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('reduced', 'Reduced'),
+        ('denied', 'Denied'),
+    ]
+    
+    cpt_code = forms.CharField(
+        max_length=10,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Enter CPT code'
+        })
+    )
+    modifier = forms.CharField(
+        max_length=10, 
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Optional modifier'
+        })
+    )
+    units = forms.IntegerField(
+        min_value=1,
+        initial=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': '1'
+        })
+    )
+    charge_amount = forms.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'step': '0.01',
+            'placeholder': '0.00'
+        })
+    )
+    allowed_amount = forms.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'step': '0.01',
+            'placeholder': '0.00'
+        })
+    )
+    decision = forms.ChoiceField(
+        choices=DECISION_CHOICES,
+        initial='pending',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    reason_code = forms.CharField(
+        max_length=20, 
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Optional reason code'
+        })
+    )
+    date_of_service = forms.DateField(
+        required=True,
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date'
+        })
+    )

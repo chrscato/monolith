@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect, HttpResponse, Http404
 from django.contrib import messages
 import logging
-from .forms import BillUpdateForm, LineItemUpdateForm, OTARateForm, PPORateForm, BillMappingForm
+from .forms import BillUpdateForm, LineItemUpdateForm, OTARateForm, PPORateForm, BillMappingForm, AddLineItemForm
 from .utils import extract_last_name, normalize_date, similar
 from django.contrib.auth.decorators import login_required
 import boto3
@@ -546,6 +546,7 @@ def get_status_distribution():
                     MAX(created_at) as last_occurrence
                 FROM ProviderBill
                 WHERE status IS NOT NULL
+                AND bill_paid != 'Y'
                 GROUP BY status
                 ORDER BY count DESC
             """)
@@ -587,6 +588,7 @@ def get_action_distribution():
                     MAX(created_at) as last_occurrence
                 FROM ProviderBill
                 WHERE action IS NOT NULL
+                AND bill_paid != 'Y'
                 GROUP BY action
                 ORDER BY count DESC
             """)
@@ -1295,6 +1297,7 @@ def bill_detail(request, bill_id):
                 'search_results': search_results,
                 'auto_searched': True,  # Flag to show results were auto-generated
                 'comparison_data': comparison_data,
+                'add_line_item_form': AddLineItemForm(),
             }
             
             return render(request, 'bill_review/bill_detail.html', context)
@@ -1618,3 +1621,51 @@ def map_bill_to_order(request, bill_id, order_id):
 def instructions(request):
     """Display process instructions for different bill statuses."""
     return render(request, 'bill_review/instructions.html')
+
+def add_line_item(request, bill_id):
+    """Add a new line item to a bill."""
+    if request.method == 'POST':
+        form = AddLineItemForm(request.POST)
+        if form.is_valid():
+            try:
+                with connection.cursor() as cursor:
+                    # Verify the bill exists
+                    cursor.execute("""
+                        SELECT id FROM ProviderBill WHERE id = %s
+                    """, [bill_id])
+                    if not cursor.fetchone():
+                        messages.error(request, 'Bill not found.')
+                        return redirect('bill_review:dashboard')
+                    
+                    # Insert the new line item
+                    cursor.execute("""
+                        INSERT INTO BillLineItem (
+                            provider_bill_id, cpt_code, modifier, units, 
+                            charge_amount, allowed_amount, decision, 
+                            reason_code, date_of_service
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, [
+                        bill_id,
+                        form.cleaned_data['cpt_code'],
+                        form.cleaned_data['modifier'],
+                        form.cleaned_data['units'],
+                        form.cleaned_data['charge_amount'],
+                        form.cleaned_data['allowed_amount'],
+                        form.cleaned_data['decision'],
+                        form.cleaned_data['reason_code'],
+                        form.cleaned_data['date_of_service']
+                    ])
+                
+                messages.success(request, 'Line item added successfully.')
+                return redirect('bill_review:bill_detail', bill_id=bill_id)
+            except Exception as e:
+                logger.error(f"Error adding line item to bill {bill_id}: {e}")
+                messages.error(request, 'Failed to add line item.')
+        else:
+            # Form validation errors
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+    
+    # If GET request or form errors, redirect back to bill detail
+    return redirect('bill_review:bill_detail', bill_id=bill_id)
