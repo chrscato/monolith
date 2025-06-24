@@ -60,3 +60,25 @@ The application includes comprehensive error handling:
 - Empty states are handled gracefully
 - User-friendly error messages are displayed
 - Failed operations return to safe states 
+
+## Environment Variables
+
+The application reads configuration from these environment variables:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_DEFAULT_REGION`
+- `S3_BUCKET`
+- `DJANGO_SECRET_KEY`
+- `DJANGO_DEBUG`
+
+Create a `.env` file in the project root (alongside `manage.py`) with values similar to:
+
+```bash
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_DEFAULT_REGION=us-east-1
+S3_BUCKET=your-bucket-name
+DJANGO_SECRET_KEY=your_django_secret
+DJANGO_DEBUG=1
+```
