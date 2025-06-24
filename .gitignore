@@ -94,8 +94,6 @@ monolith.db
 cashmere.db
 
 # Flask stuff:
-instance/
-.webassets-cache
 
 # Scrapy stuff:
 .scrapy
