@@ -1510,7 +1510,7 @@ def view_bill_pdf(request, bill_id):
             response = s3_client.list_objects_v2(
                 Bucket=bucket_name,
                 Prefix='',  # Start from root
-                MaxKeys=1000  # Get more objects to search through
+                MaxKeys=1000000  # Get more objects to search through
             )
             
             if 'Contents' in response:
@@ -1547,7 +1547,7 @@ def view_bill_pdf(request, bill_id):
                 response = s3_client.list_objects_v2(
                     Bucket=bucket_name,
                     Prefix='',
-                    MaxKeys=100000
+                    MaxKeys=1000000
                 )
                 
                 if 'Contents' in response:
@@ -1721,7 +1721,7 @@ def debug_s3_bucket(request):
                 response = s3_client.list_objects_v2(
                     Bucket=bucket_name,
                     Prefix=prefix,
-                    MaxKeys=50  # Get more objects for better analysis
+                    MaxKeys=500000  # Get more objects for better analysis
                 )
                 
                 if 'Contents' in response:
