@@ -1506,62 +1506,15 @@ def view_bill_pdf(request, bill_id):
         logger.info(f"Searching for PDF with bill_id {bill_id} anywhere in bucket")
         
         try:
-            # Search for the bill_id with .pdf extension anywhere in the bucket
-            response = s3_client.list_objects_v2(
-                Bucket=bucket_name,
-                Prefix='',  # Start from root
-                MaxKeys=1000000  # Get more objects to search through
-            )
-            
-            if 'Contents' in response:
-                # Look for files containing the bill_id and ending with .pdf
-                matching_files = []
-                for obj in response['Contents']:
+            paginator = s3_client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket_name, Prefix=''):
+                if 'Contents' not in page:
+                    continue
+                for obj in page['Contents']:
                     key = obj['Key']
                     if bill_id in key and key.lower().endswith('.pdf'):
-                        matching_files.append(key)
                         logger.info(f"Found potential PDF: {key}")
-                
-                # If we found matches, try the first one
-                if matching_files:
-                    pdf_key = matching_files[0]  # Use the first match
-                    logger.info(f"Using PDF: {pdf_key}")
-                    
-                    # Generate pre-signed URL
-                    url = s3_client.generate_presigned_url(
-                        'get_object',
-                        Params={
-                            'Bucket': bucket_name,
-                            'Key': pdf_key,
-                            'ResponseContentType': 'application/pdf'
-                        },
-                        ExpiresIn=3600  # URL expires in 1 hour
-                    )
-                    logger.info(f"Successfully generated pre-signed URL for: {pdf_key}")
-                    return HttpResponseRedirect(url)
-            
-            # If no match found with bill_id, try with order_id if available
-            if order_id:
-                logger.info(f"Searching for PDF with order_id {order_id} anywhere in bucket")
-                
-                response = s3_client.list_objects_v2(
-                    Bucket=bucket_name,
-                    Prefix='',
-                    MaxKeys=1000000
-                )
-                
-                if 'Contents' in response:
-                    matching_files = []
-                    for obj in response['Contents']:
-                        key = obj['Key']
-                        if order_id in key and key.lower().endswith('.pdf'):
-                            matching_files.append(key)
-                            logger.info(f"Found potential PDF with order_id: {key}")
-                    
-                    if matching_files:
-                        pdf_key = matching_files[0]
-                        logger.info(f"Using PDF with order_id: {pdf_key}")
-                        
+                        pdf_key = key
                         url = s3_client.generate_presigned_url(
                             'get_object',
                             Params={
@@ -1569,10 +1522,34 @@ def view_bill_pdf(request, bill_id):
                                 'Key': pdf_key,
                                 'ResponseContentType': 'application/pdf'
                             },
-                            ExpiresIn=3600
+                            ExpiresIn=3600  # URL expires in 1 hour
                         )
                         logger.info(f"Successfully generated pre-signed URL for: {pdf_key}")
                         return HttpResponseRedirect(url)
+            
+            # If no match found with bill_id, try with order_id if available
+            if order_id:
+                logger.info(f"Searching for PDF with order_id {order_id} anywhere in bucket")
+                
+                for page in paginator.paginate(Bucket=bucket_name, Prefix=''):
+                    if 'Contents' not in page:
+                        continue
+                    for obj in page['Contents']:
+                        key = obj['Key']
+                        if order_id in key and key.lower().endswith('.pdf'):
+                            logger.info(f"Found potential PDF with order_id: {key}")
+                            pdf_key = key
+                            url = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={
+                                    'Bucket': bucket_name,
+                                    'Key': pdf_key,
+                                    'ResponseContentType': 'application/pdf'
+                                },
+                                ExpiresIn=3600
+                            )
+                            logger.info(f"Successfully generated pre-signed URL for: {pdf_key}")
+                            return HttpResponseRedirect(url)
                         
         except Exception as e:
             logger.error(f"Error searching bucket for PDF: {str(e)}")
