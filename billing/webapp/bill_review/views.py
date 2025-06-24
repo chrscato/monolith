@@ -1491,6 +1491,8 @@ def view_bill_pdf(request, bill_id):
         # Define S3 bucket
         bucket_name = os.environ.get('S3_BUCKET', 'bill-review-prod')
         
+        logger.info(f"Starting PDF lookup for bill {bill_id} in bucket {bucket_name}")
+        
         # Get the order_id for this bill
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -1498,66 +1500,85 @@ def view_bill_pdf(request, bill_id):
             """, [bill_id])
             row = cursor.fetchone()
             order_id = row[0] if row else None
+            logger.info(f"Bill {bill_id} has order_id: {order_id}")
         
-        # Define possible PDF paths to check
-        possible_paths = [
-            f'data/hcfa_pdf/archived/{bill_id}.pdf',  # Using providerbill_id in archived
-            f'data/hcfa_pdf/{bill_id}.pdf',          # Using providerbill_id in root
-            f'data/ProviderBills/pdf/archive/{bill_id}.pdf',  # Using providerbill_id in new archive
-        ]
+        # First, try to find the PDF by searching the entire bucket
+        logger.info(f"Searching for PDF with bill_id {bill_id} anywhere in bucket")
         
-        # Add order_id paths if we have an order_id
-        if order_id:
-            possible_paths.extend([
-                f'data/hcfa_pdf/archived/{order_id}.pdf',  # Using order_id in archived
-                f'data/hcfa_pdf/{order_id}.pdf',          # Using order_id in root
-                f'data/ProviderBills/pdf/archive/{order_id}.pdf',  # Using order_id in new archive
-            ])
-        
-        # Log the paths we're going to try
-        logger.info(f"Attempting to find PDF for bill {bill_id} in the following paths:")
-        for path in possible_paths:
-            logger.info(f"Checking path: {path}")
-        
-        # Try each possible path
-        for pdf_key in possible_paths:
-            try:
-                # First verify the object exists
-                try:
-                    s3_client.head_object(Bucket=bucket_name, Key=pdf_key)
-                    logger.info(f"Found PDF at path: {pdf_key}")
-                except ClientError as e:
-                    error_code = e.response['Error']['Code']
-                    if error_code == '404':
-                        logger.info(f"PDF not found at path: {pdf_key}")
-                        continue
-                    else:
-                        logger.error(f"Error checking path {pdf_key}: {str(e)}")
-                        continue
-
-                # Generate pre-signed URL
-                url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={
-                        'Bucket': bucket_name,
-                        'Key': pdf_key,
-                        'ResponseContentType': 'application/pdf'
-                    },
-                    ExpiresIn=3600  # URL expires in 1 hour
+        try:
+            # Search for the bill_id with .pdf extension anywhere in the bucket
+            response = s3_client.list_objects_v2(
+                Bucket=bucket_name,
+                Prefix='',  # Start from root
+                MaxKeys=1000  # Get more objects to search through
+            )
+            
+            if 'Contents' in response:
+                # Look for files containing the bill_id and ending with .pdf
+                matching_files = []
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    if bill_id in key and key.lower().endswith('.pdf'):
+                        matching_files.append(key)
+                        logger.info(f"Found potential PDF: {key}")
+                
+                # If we found matches, try the first one
+                if matching_files:
+                    pdf_key = matching_files[0]  # Use the first match
+                    logger.info(f"Using PDF: {pdf_key}")
+                    
+                    # Generate pre-signed URL
+                    url = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={
+                            'Bucket': bucket_name,
+                            'Key': pdf_key,
+                            'ResponseContentType': 'application/pdf'
+                        },
+                        ExpiresIn=3600  # URL expires in 1 hour
+                    )
+                    logger.info(f"Successfully generated pre-signed URL for: {pdf_key}")
+                    return HttpResponseRedirect(url)
+            
+            # If no match found with bill_id, try with order_id if available
+            if order_id:
+                logger.info(f"Searching for PDF with order_id {order_id} anywhere in bucket")
+                
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket_name,
+                    Prefix='',
+                    MaxKeys=1000
                 )
-                logger.info(f"Successfully generated pre-signed URL for path: {pdf_key}")
-                return HttpResponseRedirect(url)
-            except ClientError as e:
-                error_code = e.response['Error']['Code']
-                error_message = e.response['Error']['Message']
-                logger.error(f"Error generating URL for {pdf_key}: {error_code} - {error_message}")
-                continue
-            except Exception as e:
-                logger.error(f"Unexpected error for {pdf_key}: {str(e)}")
-                continue
+                
+                if 'Contents' in response:
+                    matching_files = []
+                    for obj in response['Contents']:
+                        key = obj['Key']
+                        if order_id in key and key.lower().endswith('.pdf'):
+                            matching_files.append(key)
+                            logger.info(f"Found potential PDF with order_id: {key}")
+                    
+                    if matching_files:
+                        pdf_key = matching_files[0]
+                        logger.info(f"Using PDF with order_id: {pdf_key}")
+                        
+                        url = s3_client.generate_presigned_url(
+                            'get_object',
+                            Params={
+                                'Bucket': bucket_name,
+                                'Key': pdf_key,
+                                'ResponseContentType': 'application/pdf'
+                            },
+                            ExpiresIn=3600
+                        )
+                        logger.info(f"Successfully generated pre-signed URL for: {pdf_key}")
+                        return HttpResponseRedirect(url)
+                        
+        except Exception as e:
+            logger.error(f"Error searching bucket for PDF: {str(e)}")
         
-        # If we get here, none of the paths worked
-        logger.error(f"Failed to find PDF for bill {bill_id} in any location")
+        # If we get here, none of the searches worked
+        logger.error(f"Failed to find PDF for bill {bill_id} in bucket {bucket_name}")
         raise Http404(f"PDF for bill {bill_id} not found in S3 bucket {bucket_name}")
         
     except Exception as e:
@@ -1669,3 +1690,87 @@ def add_line_item(request, bill_id):
     
     # If GET request or form errors, redirect back to bill detail
     return redirect('bill_review:bill_detail', bill_id=bill_id)
+
+def debug_s3_bucket(request):
+    """Debug view to inspect S3 bucket contents and help identify PDF storage patterns."""
+    try:
+        # Initialize S3 client
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-2')
+        )
+        
+        bucket_name = os.environ.get('S3_BUCKET', 'bill-review-prod')
+        
+        # Common prefixes to check
+        prefixes = [
+            'data/hcfa_pdf/',
+            'data/ProviderBills/pdf/',
+            'pdfs/',
+            'bills/',
+            'data/',
+            ''  # Root level
+        ]
+        
+        bucket_contents = {}
+        
+        for prefix in prefixes:
+            try:
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket_name,
+                    Prefix=prefix,
+                    MaxKeys=50  # Get more objects for better analysis
+                )
+                
+                if 'Contents' in response:
+                    objects = response['Contents']
+                    bucket_contents[prefix] = {
+                        'count': len(objects),
+                        'objects': [obj['Key'] for obj in objects[:20]]  # Show first 20
+                    }
+                else:
+                    bucket_contents[prefix] = {'count': 0, 'objects': []}
+                    
+            except Exception as e:
+                bucket_contents[prefix] = {'error': str(e)}
+        
+        # Also get some sample bills from database to check their IDs
+        sample_bills = []
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, claim_id, patient_name, status 
+                    FROM ProviderBill 
+                    ORDER BY id DESC 
+                    LIMIT 10
+                """)
+                rows = cursor.fetchall()
+                for row in rows:
+                    sample_bills.append({
+                        'bill_id': row[0],
+                        'claim_id': row[1],
+                        'patient_name': row[2],
+                        'status': row[3]
+                    })
+        except Exception as e:
+            sample_bills = [{'error': str(e)}]
+        
+        context = {
+            'bucket_name': bucket_name,
+            'bucket_contents': bucket_contents,
+            'sample_bills': sample_bills,
+            'environment_info': {
+                'aws_region': os.environ.get('AWS_DEFAULT_REGION', 'us-east-2'),
+                's3_bucket': bucket_name,
+                'has_aws_key': bool(os.environ.get('AWS_ACCESS_KEY_ID')),
+                'has_aws_secret': bool(os.environ.get('AWS_SECRET_ACCESS_KEY')),
+            }
+        }
+        
+        return render(request, 'bill_review/debug_s3.html', context)
+        
+    except Exception as e:
+        logger.exception(f"Error in debug_s3_bucket: {str(e)}")
+        return HttpResponse(f"Error: {str(e)}", status=500)

@@ -12,6 +12,7 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+from .date_utils import standardize_and_validate_date_of_service
 
 # Get the project root directory (2 levels up from this file) for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -75,65 +76,18 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
         if not item['charge_amount'] or item['charge_amount'] <= 0:
             errors.append(f"Invalid charge amount: {item['charge_amount']}")
         
-        # Check date of service
+        # Check date of service - UPDATED with date utils
         try:
-            # Handle date range format (e.g., "01/17/2025 - 01/17/2025" or "11/25/24 - 11/25/24")
             date_str = item['date_of_service']
+            is_valid, standardized_date, error_msg = standardize_and_validate_date_of_service(date_str)
             
-            # Check for any type of dash or hyphen
-            if any(sep in date_str for sep in [' - ', '–', '—', '-']):
-                # Split on any type of dash/hyphen and clean up spaces
-                for sep in [' - ', '–', '—', '-']:
-                    if sep in date_str:
-                        start_date_str, end_date_str = [d.strip() for d in date_str.split(sep)]
-                        break
-                
-                # Try parsing both dates with different formats
-                start_date = None
-                end_date = None
-                
-                # Try 4-digit year format first
-                try:
-                    start_date = datetime.strptime(start_date_str, '%m/%d/%Y')
-                except ValueError:
-                    try:
-                        start_date = datetime.strptime(start_date_str, '%m/%d/%y')
-                    except ValueError:
-                        errors.append(f"Invalid start date format: {start_date_str}")
-                
-                try:
-                    end_date = datetime.strptime(end_date_str, '%m/%d/%Y')
-                except ValueError:
-                    try:
-                        end_date = datetime.strptime(end_date_str, '%m/%d/%y')
-                    except ValueError:
-                        errors.append(f"Invalid end date format: {end_date_str}")
-                
-                # If both dates were successfully parsed, perform validation
-                if start_date and end_date:
-                    # Check if dates are in the future
-                    if start_date > datetime.now():
-                        errors.append(f"Future start date: {start_date_str}")
-                    if end_date > datetime.now():
-                        errors.append(f"Future end date: {end_date_str}")
-                    
-                    # Check if end date is before start date
-                    if end_date < start_date:
-                        errors.append(f"End date before start date: {date_str}")
+            if not is_valid:
+                errors.append(f"Date of service error: {error_msg}")
             else:
-                # Handle single date format
-                try:
-                    service_date = datetime.strptime(date_str, '%m/%d/%Y')
-                    if service_date > datetime.now():
-                        errors.append(f"Future date of service: {date_str}")
-                except ValueError:
-                    try:
-                        service_date = datetime.strptime(date_str, '%m/%d/%y')
-                        if service_date > datetime.now():
-                            errors.append(f"Future date of service: {date_str}")
-                    except ValueError:
-                        errors.append(f"Invalid date format: {date_str}")
-                        
+                # Log if we standardized the format
+                if date_str != standardized_date:
+                    logger.info(f"Standardized date for line item {item['id']}: '{date_str}' -> '{standardized_date}'")
+                    
         except Exception as e:
             errors.append(f"Error processing date: {date_str} - {str(e)}")
     
@@ -162,6 +116,7 @@ def process_validation():
         cursor.execute("""
             SELECT id FROM ProviderBill 
             WHERE status = 'RECEIVED'
+            OR status = 'INVALID'
         """)
         bills = cursor.fetchall()
         

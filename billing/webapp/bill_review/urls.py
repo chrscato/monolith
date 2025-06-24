@@ -18,4 +18,5 @@ urlpatterns = [
     path('bill/<str:bill_id>/line-item/<int:line_item_id>/add-ppo-rate/', views.add_ppo_rate, name='add_ppo_rate'),
     path('instructions/', views.instructions, name='instructions'),
     path('bill/<str:bill_id>/line-item/add/', views.add_line_item, name='add_line_item'),
+    path('debug/s3/', views.debug_s3_bucket, name='debug_s3_bucket'),
 ]

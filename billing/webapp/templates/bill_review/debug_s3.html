@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block title %}S3 Bucket Debug{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>S3 Bucket Debug Information</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Environment Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Bucket Name:</strong></td>
+                            <td>{{ bucket_name }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>AWS Region:</strong></td>
+                            <td>{{ environment_info.aws_region }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>AWS Access Key:</strong></td>
+                            <td>
+                                {% if environment_info.has_aws_key %}
+                                    <span class="text-success">✓ Configured</span>
+                                {% else %}
+                                    <span class="text-danger">✗ Missing</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>AWS Secret Key:</strong></td>
+                            <td>
+                                {% if environment_info.has_aws_secret %}
+                                    <span class="text-success">✓ Configured</span>
+                                {% else %}
+                                    <span class="text-danger">✗ Missing</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Sample Bills from Database</h5>
+                </div>
+                <div class="card-body">
+                    {% if sample_bills %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Bill ID</th>
+                                        <th>Claim ID</th>
+                                        <th>Patient</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for bill in sample_bills %}
+                                        {% if 'error' not in bill %}
+                                            <tr>
+                                                <td><code>{{ bill.bill_id|truncatechars:20 }}</code></td>
+                                                <td><code>{{ bill.claim_id|default:"None"|truncatechars:20 }}</code></td>
+                                                <td>{{ bill.patient_name|truncatechars:20 }}</td>
+                                                <td><span class="badge bg-secondary">{{ bill.status }}</span></td>
+                                            </tr>
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="4" class="text-danger">{{ bill.error }}</td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No bills found in database.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5>S3 Bucket Contents by Prefix</h5>
+        </div>
+        <div class="card-body">
+            {% for prefix, data in bucket_contents.items %}
+                <div class="mb-4">
+                    <h6>
+                        {% if prefix %}
+                            Prefix: <code>{{ prefix }}</code>
+                        {% else %}
+                            Root Level
+                        {% endif %}
+                    </h6>
+                    
+                    {% if 'error' in data %}
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> {{ data.error }}
+                        </div>
+                    {% else %}
+                        <p><strong>Object Count:</strong> {{ data.count }}</p>
+                        
+                        {% if data.objects %}
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Object Key</th>
+                                            <th>Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for object_key in data.objects %}
+                                            <tr>
+                                                <td>{{ forloop.counter }}</td>
+                                                <td><code>{{ object_key }}</code></td>
+                                                <td>
+                                                    {% if object_key|lower|slice:"-4:" == '.pdf' %}
+                                                        <span class="badge bg-success">PDF</span>
+                                                    {% elif object_key|lower|slice:"-4:" == '.jpg' or object_key|lower|slice:"-5:" == '.jpeg' %}
+                                                        <span class="badge bg-info">Image</span>
+                                                    {% elif object_key|lower|slice:"-4:" == '.txt' %}
+                                                        <span class="badge bg-warning">Text</span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">Other</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            {% if data.count > 20 %}
+                                <p class="text-muted">Showing first 20 of {{ data.count }} objects</p>
+                            {% endif %}
+                        {% else %}
+                            <p class="text-muted">No objects found in this prefix.</p>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <a href="{% url 'bill_review:dashboard' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %} 

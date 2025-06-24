@@ -93,97 +93,117 @@ def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> 
     # Use the absolute path to monolith.db
     db_path = DB_ROOT / 'monolith.db'
     print(f"Connecting to database at: {db_path}")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
     
-    try:
-        # Extract patient and billing info
-        patient_info = extracted_data.get('patient_info', {})
-        billing_info = extracted_data.get('billing_info', {})
-        
-        # Convert total charge from string to float if present
-        total_charge = None
-        if 'total_charge' in billing_info:
-            total_charge = float(billing_info['total_charge'].replace('$', '').replace(',', ''))
-        
-        # First check if the record exists
-        cursor.execute("SELECT id FROM ProviderBill WHERE id = ?", (provider_bill_id,))
-        if not cursor.fetchone():
-            print(f"Record {provider_bill_id} not found in ProviderBill table")
-            return False
-        
-        # Update ProviderBill record with all fields
-        cursor.execute(
-            """
-            UPDATE "ProviderBill" 
-            SET status = ?,
-                last_error = NULL,
-                patient_name = ?,
-                patient_dob = ?,
-                patient_zip = ?,
-                billing_provider_name = ?,
-                billing_provider_address = ?,
-                billing_provider_tin = ?,
-                billing_provider_npi = ?,
-                total_charge = ?,
-                patient_account_no = ?,
-                action = NULL,
-                bill_paid = 'N'
-            WHERE id = ?
-            """,
-            (
-                'RECEIVED',
-                patient_info.get('patient_name'),
-                patient_info.get('patient_dob'),
-                patient_info.get('patient_zip'),
-                billing_info.get('billing_provider_name'),
-                billing_info.get('billing_provider_address'),
-                billing_info.get('billing_provider_tin'),
-                billing_info.get('billing_provider_npi'),
-                total_charge,
-                billing_info.get('patient_account_no'),
-                provider_bill_id
-            )
-        )
-        
-        # Create BillLineItem entries for each service line
-        for line in extracted_data.get('service_lines', []):
-            # Convert charge amount from string to float
-            charge_amount = float(line['charge_amount'].replace('$', '').replace(',', ''))
+    # Add retry logic for database lock issues
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # Add timeout to handle database locks
+            conn = sqlite3.connect(db_path, timeout=30.0)
+            cursor = conn.cursor()
             
-            # Join modifiers with comma if multiple
-            modifiers = ','.join(line.get('modifiers', [])) if line.get('modifiers') else ''
+            # Extract patient and billing info
+            patient_info = extracted_data.get('patient_info', {})
+            billing_info = extracted_data.get('billing_info', {})
             
+            # Convert total charge from string to float if present
+            total_charge = None
+            if 'total_charge' in billing_info:
+                total_charge = float(billing_info['total_charge'].replace('$', '').replace(',', ''))
+            
+            # First check if the record exists
+            cursor.execute("SELECT id FROM ProviderBill WHERE id = ?", (provider_bill_id,))
+            if not cursor.fetchone():
+                print(f"Record {provider_bill_id} not found in ProviderBill table")
+                return False
+            
+            # Update ProviderBill record with all fields
             cursor.execute(
                 """
-                INSERT INTO "BillLineItem" (
-                    provider_bill_id, cpt_code, modifier, units,
-                    charge_amount, allowed_amount, decision,
-                    reason_code, date_of_service, place_of_service,
-                    diagnosis_pointer
-                ) VALUES (?, ?, ?, ?, ?, NULL, 'pending', '', ?, ?, ?)
+                UPDATE "ProviderBill" 
+                SET status = ?,
+                    last_error = NULL,
+                    patient_name = ?,
+                    patient_dob = ?,
+                    patient_zip = ?,
+                    billing_provider_name = ?,
+                    billing_provider_address = ?,
+                    billing_provider_tin = ?,
+                    billing_provider_npi = ?,
+                    total_charge = ?,
+                    patient_account_no = ?,
+                    action = NULL,
+                    bill_paid = 'N'
+                WHERE id = ?
                 """,
                 (
-                    provider_bill_id,
-                    line['cpt_code'],
-                    modifiers,
-                    line['units'],
-                    charge_amount,
-                    line['date_of_service'],
-                    line.get('place_of_service'),
-                    line.get('diagnosis_pointer')
+                    'RECEIVED',
+                    patient_info.get('patient_name'),
+                    patient_info.get('patient_dob'),
+                    patient_info.get('patient_zip'),
+                    billing_info.get('billing_provider_name'),
+                    billing_info.get('billing_provider_address'),
+                    billing_info.get('billing_provider_tin'),
+                    billing_info.get('billing_provider_npi'),
+                    total_charge,
+                    billing_info.get('patient_account_no'),
+                    provider_bill_id
                 )
             )
-        
-        conn.commit()
-        return True
-        
-    except sqlite3.Error as e:
-        conn.rollback()
-        print(f"Database error updating ProviderBill {provider_bill_id}: {str(e)}")
-        return False
-    finally:
-        conn.close()
+            
+            # Create BillLineItem entries for each service line
+            for line in extracted_data.get('service_lines', []):
+                # Convert charge amount from string to float
+                charge_amount = float(line['charge_amount'].replace('$', '').replace(',', ''))
+                
+                # Join modifiers with comma if multiple
+                modifiers = ','.join(line.get('modifiers', [])) if line.get('modifiers') else ''
+                
+                cursor.execute(
+                    """
+                    INSERT INTO "BillLineItem" (
+                        provider_bill_id, cpt_code, modifier, units,
+                        charge_amount, allowed_amount, decision,
+                        reason_code, date_of_service, place_of_service,
+                        diagnosis_pointer
+                    ) VALUES (?, ?, ?, ?, ?, NULL, 'pending', '', ?, ?, ?)
+                    """,
+                    (
+                        provider_bill_id,
+                        line['cpt_code'],
+                        modifiers,
+                        line['units'],
+                        charge_amount,
+                        line['date_of_service'],
+                        line.get('place_of_service'),
+                        line.get('diagnosis_pointer')
+                    )
+                )
+            
+            conn.commit()
+            return True
+            
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e) and attempt < max_retries - 1:
+                print(f"Database locked for {provider_bill_id}, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                import time
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                conn.rollback()
+                print(f"Database error updating ProviderBill {provider_bill_id}: {str(e)}")
+                return False
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Database error updating ProviderBill {provider_bill_id}: {str(e)}")
+            return False
+        finally:
+            conn.close()
+    
+    return False
 
 
 def process_llm_s3(limit=None):
@@ -233,10 +253,39 @@ def process_llm_s3(limit=None):
                 upload(temp_output.name, output_key)
                 os.unlink(temp_output.name)  # Clean up temp file
                 
+                # Create local backup before archiving (if we have the original file)
+                if local_json and os.path.exists(local_json):
+                    backup_dir = Path("backup_ocr_files")
+                    backup_dir.mkdir(exist_ok=True)
+                    backup_path = backup_dir / f"{provider_bill_id}.json"
+                    
+                    try:
+                        # Copy the local OCR JSON to backup location
+                        import shutil
+                        shutil.copy2(local_json, backup_path)
+                        print(f" 📁 Local backup: {backup_path}")
+                    except Exception as backup_exc:
+                        print(f" ⚠ Local backup failed: {backup_exc}")
+                
                 # Archive the input file
-                archive_key = f"{ARCHIVE_PREFIX}{os.path.basename(key)}"
-                move(key, archive_key)
-                print(f"✓ Processed and archived: {key}")
+                try:
+                    archive_key = f"{ARCHIVE_PREFIX}{os.path.basename(key)}"
+                    move(key, archive_key)
+                    print(f"✓ Processed and archived: {key}")
+                    
+                    # If S3 archive succeeded, we can optionally remove local backup
+                    # Uncomment the next line if you want to auto-cleanup successful backups
+                    # backup_path.unlink(missing_ok=True)
+                    
+                except Exception as archive_exc:
+                    print(f" ⚠ Archive failed: {archive_exc}")
+                    if 'backup_path' in locals():
+                        print(f" 💾 Local backup preserved at: {backup_path}")
+                    # Log the archiving failure
+                    err = tempfile.mktemp(suffix=".log")
+                    with open(err, "w") as f:
+                        f.write(f"{datetime.now()}: {key} – Archive failed: {archive_exc}\n")
+                    upload(err, LOG_PREFIX)
             else:
                 print(f"❌ Database update failed for: {key}")
                 

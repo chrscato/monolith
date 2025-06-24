@@ -89,32 +89,38 @@ def list_objects(prefix: str, bucket: str = None) -> list:
         return []
 
 def move(source_key: str, dest_key: str, bucket: str = None) -> bool:
-    """
-    Move an object within S3 (copy and delete).
-    
-    Args:
-        source_key: Source S3 key
-        dest_key: Destination S3 key
-        bucket: S3 bucket name (defaults to S3_BUCKET env var)
-    
-    Returns:
-        bool: True if move was successful, False otherwise
-    """
     if bucket is None:
         bucket = os.getenv('S3_BUCKET')
     
     try:
         s3_client = get_s3_client()
+        
+        # First, verify source exists
+        try:
+            s3_client.head_object(Bucket=bucket, Key=source_key)
+        except ClientError:
+            logger.error(f"Source object does not exist: s3://{bucket}/{source_key}")
+            return False
+        
         # Copy to new location
         s3_client.copy_object(
             Bucket=bucket,
             CopySource={'Bucket': bucket, 'Key': source_key},
             Key=dest_key
         )
-        # Delete from old location
+        
+        # Verify the copy was successful before deleting
+        try:
+            s3_client.head_object(Bucket=bucket, Key=dest_key)
+        except ClientError:
+            logger.error(f"Copy verification failed for: s3://{bucket}/{dest_key}")
+            return False
+        
+        # Only delete after successful copy verification
         s3_client.delete_object(Bucket=bucket, Key=source_key)
         logger.info(f"Successfully moved s3://{bucket}/{source_key} to s3://{bucket}/{dest_key}")
         return True
+        
     except ClientError as e:
         logger.error(f"Error moving s3://{bucket}/{source_key} to s3://{bucket}/{dest_key}: {str(e)}")
-        return False 
+        return False

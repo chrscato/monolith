@@ -6,3 +6,7 @@
 2025-05-26 09:15:29,203 - INFO - Orders inserted: 77, updated: 2111
 2025-05-26 09:15:29,208 - INFO - Line items inserted: 2141, updated: 2493
 2025-05-26 09:15:29,221 - INFO - ✅ Import complete
+2025-06-18 08:02:45,298 - INFO - Starting import from C:\Users\ChristopherCato\Downloads\orders20250618.csv to C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db
+2025-06-18 08:04:59,958 - INFO - Orders inserted: 251, updated: 2111
+2025-06-18 08:04:59,961 - INFO - Line items inserted: 2683, updated: 2502
+2025-06-18 08:04:59,970 - INFO - ✅ Import complete

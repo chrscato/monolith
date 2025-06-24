@@ -17,11 +17,12 @@ from pathlib import Path
 from PyPDF2 import PdfReader, PdfWriter
 from dotenv import load_dotenv
 import sqlite3
+import logging
 
 # Get the project root directory (4 levels up from this file)
 project_root = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(project_root))  # Add project root to Python path
-
+logger = logging.getLogger(__name__)
 # Load environment variables from .env
 load_dotenv(project_root / '.env')
 
@@ -139,7 +140,7 @@ def process_batch_files():
         logger.error(f"Error in batch processing: {str(e)}", exc_info=True)
         raise
 
-def main():
+def split_hcfa_batch():
     # Setup basic logging when run directly
     logging.basicConfig(
         level=logging.INFO,
@@ -149,4 +150,4 @@ def main():
     process_batch_files()
 
 if __name__ == '__main__':
-    main()
+    split_hcfa_batch()
