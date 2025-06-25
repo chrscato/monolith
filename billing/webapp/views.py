@@ -117,39 +117,19 @@ def get_bill_line_items(bill_id):
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
-def get_status_distribution(filtered=False, status=None, action=None):
-    """Get distribution of bill statuses with metadata."""
-    query = """
-        SELECT 
-            status,
-            COUNT(*) as count,
-            MIN(created_at) as first_occurrence,
-            MAX(created_at) as last_occurrence
-        FROM ProviderBill
-        WHERE bill_paid != 'Y'
-    """
-    params = []
-    
-    if filtered:
-        if status:
-            query += " AND status = %s"
-            params.append(status)
-        if action:
-            query += " AND action = %s"
-            params.append(action)
-            
-    query += " GROUP BY status ORDER BY count DESC"
-    
-    logger.info("Status Distribution Query: %s", query)
-    logger.info("Status Distribution Params: %s", params)
-    
+def get_status_distribution():
+    """Get distribution of all bill statuses for overview charts."""
     with connection.cursor() as cursor:
-        cursor.execute(query, params)
-        columns = [col[0] for col in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        logger.info("Status Distribution Results: %s", results)
+        cursor.execute("""
+            SELECT status, COUNT(*) as count
+            FROM ProviderBill
+            WHERE bill_paid != 'Y'
+            GROUP BY status 
+            ORDER BY count DESC
+        """)
+        results = [dict(zip(['status', 'count'], row)) for row in cursor.fetchall()]
         
-        # Enhance results with metadata
+        # Add metadata
         for result in results:
             status = result['status']
             result['color'] = STATUS_METADATA.get(status, {}).get('color', 'secondary')
@@ -158,38 +138,18 @@ def get_status_distribution(filtered=False, status=None, action=None):
         return results
 
 
-def get_action_distribution(filtered=False, status=None, action=None):
-    """Get distribution of bill actions with metadata."""
-    query = """
-        SELECT 
-            action,
-            COUNT(*) as count,
-            MIN(created_at) as first_occurrence,
-            MAX(created_at) as last_occurrence
-        FROM ProviderBill
-        WHERE action IS NOT NULL
-        AND bill_paid != 'Y'
-    """
-    params = []
-    
-    if filtered:
-        if status:
-            query += " AND status = %s"
-            params.append(status)
-        if action:
-            query += " AND action = %s"
-            params.append(action)
-            
-    query += " GROUP BY action ORDER BY count DESC"
-    
-    logger.info("Action Distribution Query: %s", query)
-    logger.info("Action Distribution Params: %s", params)
-    
+def get_action_distribution():
+    """Get distribution of all bill actions for overview charts."""
     with connection.cursor() as cursor:
-        cursor.execute(query, params)
-        columns = [col[0] for col in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        logger.info("Action Distribution Results: %s", results)
+        cursor.execute("""
+            SELECT action, COUNT(*) as count
+            FROM ProviderBill
+            WHERE action IS NOT NULL
+            AND bill_paid != 'Y'
+            GROUP BY action 
+            ORDER BY count DESC
+        """)
+        results = [dict(zip(['action', 'count'], row)) for row in cursor.fetchall()]
         return results
 
 
@@ -247,13 +207,9 @@ class DashboardView(ListView):
         # Get filtered bills
         context["bills"] = get_filtered_bills(status, action)
         
-        # Get distributions for charts (with filter context)
-        context["status_distribution"] = get_status_distribution(
-            filtered=True, status=status, action=action
-        )
-        context["action_distribution"] = get_action_distribution(
-            filtered=True, status=status, action=action
-        )
+        # Get distributions for charts (always show complete overview)
+        context["status_distribution"] = get_status_distribution()
+        context["action_distribution"] = get_action_distribution()
         
         # Get unique statuses and actions for filter dropdowns
         with connection.cursor() as cursor:
