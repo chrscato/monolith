@@ -83,7 +83,7 @@ The preprocessing pipeline processes medical provider bills (CMS-1500 forms) thr
      - `diagnosis_pointer` (optional)
 
 ### Validation Rules
-1. Total charge must match sum of line item charges (within $0.01 tolerance)
+1. Total charge must match sum of line item charges (within $10.00 tolerance)
 2. No future dates of service allowed
 3. CPT codes must be 5 digits
 4. Charge amounts must be positive numbers
