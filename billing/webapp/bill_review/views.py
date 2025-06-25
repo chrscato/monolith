@@ -546,7 +546,6 @@ def get_status_distribution():
                     MAX(created_at) as last_occurrence
                 FROM ProviderBill
                 WHERE status IS NOT NULL
-                AND bill_paid != 'Y'
                 GROUP BY status
                 ORDER BY count DESC
             """)
@@ -588,7 +587,6 @@ def get_action_distribution():
                     MAX(created_at) as last_occurrence
                 FROM ProviderBill
                 WHERE action IS NOT NULL
-                AND bill_paid != 'Y'
                 GROUP BY action
                 ORDER BY count DESC
             """)

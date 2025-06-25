@@ -123,7 +123,6 @@ def get_status_distribution():
         cursor.execute("""
             SELECT status, COUNT(*) as count
             FROM ProviderBill
-            WHERE bill_paid != 'Y'
             GROUP BY status 
             ORDER BY count DESC
         """)
@@ -145,7 +144,6 @@ def get_action_distribution():
             SELECT action, COUNT(*) as count
             FROM ProviderBill
             WHERE action IS NOT NULL
-            AND bill_paid != 'Y'
             GROUP BY action 
             ORDER BY count DESC
         """)
@@ -168,7 +166,7 @@ def get_filtered_bills(status=None, action=None):
         FROM ProviderBill pb
         LEFT JOIN orders o ON pb.claim_id = o.Order_ID
         LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
-        WHERE pb.bill_paid != 'Y'
+        WHERE 1=1
     """
     params = []
     
