@@ -134,7 +134,35 @@ def extract_via_llm(pdf_path: str) -> dict:
         max_tokens    = 2048
     )
 
-    return json.loads(resp.choices[0].message.function_call.arguments)
+    extracted_data = json.loads(resp.choices[0].message.function_call.arguments)
+    
+    # Validate service lines were extracted
+    service_lines = extracted_data.get("service_lines", [])
+    if not service_lines:
+        print(f" ⚠ WARNING: No service lines extracted from {Path(pdf_path).name}")
+        print(f"   Extracted data keys: {list(extracted_data.keys())}")
+        if "billing_info" in extracted_data:
+            total_charge = extracted_data["billing_info"].get("total_charge")
+            if total_charge:
+                print(f"   Total charge found: {total_charge} - creating fallback service line")
+                # Create a fallback service line with the total charge
+                extracted_data["service_lines"] = [{
+                    "date_of_service": None,
+                    "place_of_service": None,
+                    "cpt_code": "unknown",
+                    "modifiers": [],
+                    "diagnosis_pointer": None,
+                    "charge_amount": total_charge,
+                    "units": 1
+                }]
+    else:
+        print(f"   ✓ Extracted {len(service_lines)} service line(s)")
+        for i, line in enumerate(service_lines):
+            cpt = line.get("cpt_code", "unknown")
+            charge = line.get("charge_amount", "unknown")
+            print(f"     Line {i+1}: CPT={cpt}, Charge={charge}")
+    
+    return extracted_data
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SQLite update  (same logic as legacy script)
@@ -233,6 +261,37 @@ def process_s3(limit: int | None = None):
             print(f"→ {bill_id}")
 
             data = normalise_charges(extract_via_llm(tmp_pdf))
+
+            # Additional validation before database update
+            service_lines = data.get("service_lines", [])
+            if not service_lines:
+                print(f" ❌ ERROR: No service lines found after extraction for {bill_id}")
+                # Log this as an error
+                err = tempfile.mktemp(suffix=".log")
+                with open(err, "w") as f:
+                    f.write(f"{datetime.now()}: {key} – No service lines extracted\n")
+                upload(err, LOG_PREFIX)
+                continue
+            
+            # Validate that service lines have required fields
+            valid_service_lines = []
+            for i, line in enumerate(service_lines):
+                if not line.get("cpt_code") or not line.get("charge_amount"):
+                    print(f" ⚠ WARNING: Service line {i+1} missing required fields (CPT: {line.get('cpt_code')}, Charge: {line.get('charge_amount')})")
+                    continue
+                valid_service_lines.append(line)
+            
+            if not valid_service_lines:
+                print(f" ❌ ERROR: No valid service lines found for {bill_id}")
+                err = tempfile.mktemp(suffix=".log")
+                with open(err, "w") as f:
+                    f.write(f"{datetime.now()}: {key} – No valid service lines (missing CPT or charge)\n")
+                upload(err, LOG_PREFIX)
+                continue
+            
+            # Update data with validated service lines
+            data["service_lines"] = valid_service_lines
+            print(f"   ✓ Validated {len(valid_service_lines)} service line(s)")
 
             if update_provider_bill(bill_id, data):
                 # push JSON

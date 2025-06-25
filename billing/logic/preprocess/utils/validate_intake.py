@@ -55,7 +55,7 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
     line_items = cursor.fetchall()
     
     if not line_items:
-        return 'INVALID', 'to_validate', f"No line items found for ProviderBill {bill_id}"
+        return 'INVALID', 'add_line_items', f"No line items found for ProviderBill {bill_id}"
     
     # Validation checks
     errors = []
@@ -116,7 +116,6 @@ def process_validation():
         cursor.execute("""
             SELECT id FROM ProviderBill 
             WHERE status = 'RECEIVED'
-            OR status = 'INVALID'
         """)
         bills = cursor.fetchall()
         
