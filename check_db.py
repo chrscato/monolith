@@ -4,7 +4,7 @@ import os
 
 # Get the actual project root (one level up from billing)
 project_root = Path(__file__).resolve().parent
-db_path = project_root / 'monolith.db'
+db_path = Path(os.getenv('MONOLITH_DB_PATH', project_root / 'monolith.db'))
 
 print(f"Current working directory: {os.getcwd()}")
 print(f"Checking database at: {db_path}")

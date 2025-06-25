@@ -5,18 +5,19 @@ import sqlite3
 import re
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
+import os
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 
-# Get the absolute path to the monolith root directory
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+# Get the absolute path to the monolith repo root
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 def get_db_connection(db_path: str = None) -> sqlite3.Connection:
     """Get a connection to the SQLite database."""
     if db_path is None:
-        db_path = str(DB_ROOT / 'monolith.db')
+        db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row

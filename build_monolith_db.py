@@ -1,7 +1,10 @@
 
 import sqlite3
+import os
 
-def create_monolith_db(db_path='monolith.db'):
+def create_monolith_db(db_path=None):
+    if db_path is None:
+        db_path = os.getenv('MONOLITH_DB_PATH', 'monolith.db')
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
 

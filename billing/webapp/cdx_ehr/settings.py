@@ -78,7 +78,7 @@ WSGI_APPLICATION = 'cdx_ehr.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR.parent.parent / 'monolith.db',
+        'NAME': os.getenv('MONOLITH_DB_PATH', str(BASE_DIR.parent.parent / 'monolith.db')),
     }
 }
 

@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / '.env')
 
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ def map_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, str, s
         return 'UNMAPPED', 'to_map', error
 
 def process_mapping():
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -218,7 +218,7 @@ def process_mapping():
 
 
 def run_diagnostic(bill_id: str):
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()

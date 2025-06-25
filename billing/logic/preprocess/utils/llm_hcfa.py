@@ -19,8 +19,8 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-# Get the absolute path to the monolith root directory
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+# Get the absolute path to the monolith repo root
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 # Load environment variables from the root .env file
 load_dotenv(DB_ROOT / '.env')
@@ -90,8 +90,8 @@ def clean_gpt_output(raw: str) -> str:
 
 def update_provider_bill_record(provider_bill_id: str, extracted_data: dict) -> bool:
     """Update ProviderBill record and create BillLineItem entries in the database."""
-    # Use the absolute path to monolith.db
-    db_path = DB_ROOT / 'monolith.db'
+    # Path to SQLite DB can be configured via MONOLITH_DB_PATH
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     print(f"Connecting to database at: {db_path}")
     
     # Add retry logic for database lock issues

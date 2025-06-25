@@ -22,7 +22,7 @@ sys.path.append(str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / '.env')
 
 # Get the absolute path to the monolith root directory
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -113,7 +113,7 @@ def similar(a: str, b: str) -> float:
 
 def show_name_comparisons(bill_id: str):
     """Show name comparisons for a specific bill."""
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -229,7 +229,7 @@ def show_name_comparisons(bill_id: str):
 
 def show_dos_comparisons(bill_id: str):
     """Show date of service comparisons for a specific bill."""
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
