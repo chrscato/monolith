@@ -39,9 +39,6 @@ def clean_name(name: str) -> str:
     name = re.sub(r'\s+', ' ', name)
     return name.strip()
 
-def format_name_for_matching(last: str, first: str) -> str:
-    return f"{clean_name(last)} {clean_name(first)}"
-
 def normalize_date(date_str: str) -> Optional[datetime.date]:
     if not date_str:
         return None
@@ -70,7 +67,7 @@ def similar(a: str, b: str) -> float:
 # ─── Matching Logic ──────────────────────────────────────────────
 
 def find_matching_claim(bill: dict, cursor: sqlite3.Cursor, is_diagnostic=False) -> str | None:
-    bill_patient_name = clean_name(bill['patient_name'].replace(",", ""))
+    bill_patient_name = clean_name(bill['patient_name'])
     logger.info(f"📌 Cleaned bill name: {bill_patient_name}")
 
     cursor.execute("""
@@ -98,10 +95,16 @@ def find_matching_claim(bill: dict, cursor: sqlite3.Cursor, is_diagnostic=False)
     top_matches = []
 
     for order in orders:
-        order_name = format_name_for_matching(order['Patient_Last_Name'], order['Patient_First_Name'])
+        # Try "first last" format first
+        order_name = f"{clean_name(order['Patient_First_Name'])} {clean_name(order['Patient_Last_Name'])}"
         sim = similar(bill_patient_name, order_name)
         order_date = normalize_date(order['DOS'])
         date_close = any(abs((order_date - bd).days) <= 21 for bd in bill_dates if order_date)
+
+        # If no match with "first last", try "last first" format
+        if sim < 0.80 and date_close:
+            order_name_flipped = f"{clean_name(order['Patient_Last_Name'])} {clean_name(order['Patient_First_Name'])}"
+            sim = similar(bill_patient_name, order_name_flipped)
 
         if sim >= 0.80 and date_close:
             top_matches.append((order['Order_ID'], sim, order_date))

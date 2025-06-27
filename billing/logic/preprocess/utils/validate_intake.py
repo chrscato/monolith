@@ -12,7 +12,7 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
-from .date_utils import standardize_and_validate_date_of_service
+from date_utils import standardize_and_validate_date_of_service
 
 # Get the project root directory (2 levels up from this file) for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
