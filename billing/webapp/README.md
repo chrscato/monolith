@@ -41,7 +41,9 @@ python manage.py runserver
 
 ## Database
 
-The application uses an existing SQLite database (monolith.db) located in the parent directory. The database should contain the following tables:
+The application uses an existing SQLite database. By default the path is read from
+the `MONOLITH_DB_PATH` environment variable (falling back to `monolith.db` in the
+project root). The database should contain the following tables:
 - ProviderBill
 - BillLineItem
 - orders

@@ -30,7 +30,7 @@ from config.s3_utils import list_objects
 S3_BUCKET = os.getenv("S3_BUCKET", "bill-review-prod")
 INPUT_PREFIX = "data/ProviderBills/pdf/"
 ARCHIVE_PREFIX = "data/ProviderBills/pdf/archive/"
-DB_PATH = r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db"
+DB_PATH = os.getenv("MONOLITH_DB_PATH", str(PROJECT_ROOT / "monolith.db"))
 
 def find_bills_by_status(status_filter: str = None) -> list[str]:
     """Find bills with specific status."""

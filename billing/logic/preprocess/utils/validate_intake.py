@@ -21,8 +21,8 @@ sys.path.append(str(PROJECT_ROOT))
 # Load environment variables from the root .env file
 load_dotenv(PROJECT_ROOT / '.env')
 
-# Get the absolute path to the monolith root directory
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+# Get the absolute path to the monolith repo root
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -106,7 +106,7 @@ def validate_provider_bill(bill_id: str, cursor: sqlite3.Cursor) -> tuple[str, s
 
 def process_validation():
     """Process all ProviderBill records that need validation."""
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row  # Set row factory to return rows as dictionaries
     cursor = conn.cursor()

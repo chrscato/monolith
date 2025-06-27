@@ -1,6 +1,9 @@
 import sqlite3
+import os
 
-def copy_all_tables(source_path=r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\bill_review2\filemaker.db", target_path=r'C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\cdx_ehr\monolith.db'):
+def copy_all_tables(source_path=r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\bill_review2\filemaker.db", target_path=None):
+    if target_path is None:
+        target_path = os.getenv('MONOLITH_DB_PATH', r'C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\cdx_ehr\monolith.db')
     src_conn = sqlite3.connect(source_path)
     tgt_conn = sqlite3.connect(target_path)
     src_cursor = src_conn.cursor()

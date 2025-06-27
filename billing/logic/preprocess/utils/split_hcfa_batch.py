@@ -36,7 +36,7 @@ OUTPUT_PREFIX = 'data/ProviderBills/pdf/'
 S3_BUCKET = os.getenv('S3_BUCKET', 'bill-review-prod')
 
 # Get the absolute path to the monolith root directory
-DB_ROOT = Path(r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith")
+DB_ROOT = Path(__file__).resolve().parents[4]
 
 def ensure_directories():
     """Ensure input and archive directories exist."""
@@ -48,7 +48,7 @@ def ensure_directories():
 
 def create_provider_bill_entry(source_file: str) -> str:
     """Create a new entry in the ProviderBill table and return its ID."""
-    db_path = DB_ROOT / 'monolith.db'
+    db_path = os.getenv("MONOLITH_DB_PATH", str(DB_ROOT / 'monolith.db'))
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
