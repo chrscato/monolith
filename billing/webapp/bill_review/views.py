@@ -18,6 +18,17 @@ from datetime import date, timedelta, datetime
 
 logger = logging.getLogger(__name__)
 
+# Define status colors and descriptions
+STATUS_METADATA = {
+    'FLAGGED': {'color': 'warning', 'description': 'Bills that need review'},
+    'ERROR': {'color': 'danger', 'description': 'Bills with processing errors'},
+    'ARTHROGRAM': {'color': 'info', 'description': 'Arthrogram bills'},
+    'MAPPED': {'color': 'success', 'description': 'Successfully mapped bills'},
+    'PROCESSED': {'color': 'primary', 'description': 'Processed bills'},
+    'REVIEW_FLAG': {'color': 'warning', 'description': 'Bills flagged for review'},
+    'REVIEWED': {'color': 'success', 'description': 'Bills that have been reviewed'},
+}
+
 def generate_comparison_data(bill_items, order_items, cpt_categories, ancillary_codes):
     """
     Generate comparison data structure for side-by-side display.
@@ -552,15 +563,11 @@ def get_status_distribution():
             statuses = []
             for row in cursor.fetchall():
                 status = row[0] or 'No Status'  # Convert None to 'No Status'
-                color = 'secondary'  # default color
-                if status == 'FLAGGED':
-                    color = 'warning'
-                elif status == 'ERROR':
-                    color = 'danger'
-                elif status == 'REVIEWED':
-                    color = 'success'
-                elif status == 'MAPPED':
-                    color = 'info'
+                
+                # Use STATUS_METADATA for color and description, fallback to defaults
+                status_info = STATUS_METADATA.get(status, {})
+                color = status_info.get('color', 'secondary')
+                description = status_info.get('description', f'Bills with status {status}')
                 
                 statuses.append({
                     'status': status,
@@ -568,7 +575,7 @@ def get_status_distribution():
                     'first_occurrence': row[2] or '',  # Convert None to empty string
                     'last_occurrence': row[3] or '',   # Convert None to empty string
                     'color': color,
-                    'description': f'Bills with status {status}'
+                    'description': description
                 })
             return statuses
     except Exception as e:
@@ -644,6 +651,12 @@ def get_filtered_bills(status=None, action=None):
                 bill['action'] = bill['action'] or 'No Action'
                 bill['last_error'] = bill['last_error'] or ''
                 bill['provider_name'] = bill['provider_name'] or 'Unknown Provider'
+                
+                # Add status description using STATUS_METADATA
+                status_info = STATUS_METADATA.get(bill['status'], {})
+                bill['status_description'] = status_info.get('description', f'Bills with status {bill["status"]}')
+                bill['status_color'] = status_info.get('color', 'secondary')
+                
                 bills.append(bill)
             return bills
     except Exception as e:

@@ -144,7 +144,7 @@
                             <td>{{ bill.patient_id }}</td>
                             <td>{{ bill.provider_name }}</td>
                             <td>
-                                <span class="badge bg-{{ bill.status|lower }}" 
+                                <span class="badge bg-{{ bill.status_color|default:'secondary' }}" 
                                       data-bs-toggle="tooltip" 
                                       title="{{ bill.status_description }}">
                                     {{ bill.status }}
