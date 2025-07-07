@@ -1,4 +1,5 @@
 <!-- billing/webapp/bill_review/templates/base.html -->
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +10,126 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Mobile CSS -->
+    <link href="{% static 'css/mobile.css' %}" rel="stylesheet">
+    <style>
+        /* Mobile-specific improvements */
+        @media (max-width: 768px) {
+            /* Better touch targets */
+            .btn {
+                min-height: 44px;
+                padding: 0.5rem 1rem;
+                font-size: 1rem;
+            }
+            
+            /* Mobile-optimized navbar */
+            .navbar-nav .nav-link {
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            /* Mobile action buttons */
+            .mobile-action-buttons {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .mobile-action-buttons .btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            /* Mobile table improvements */
+            .mobile-table {
+                font-size: 0.875rem;
+            }
+            
+            .mobile-table th,
+            .mobile-table td {
+                padding: 0.5rem 0.25rem;
+            }
+            
+            /* Mobile form improvements */
+            .mobile-form .form-control,
+            .mobile-form .form-select {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 0.75rem;
+            }
+            
+            /* Mobile modal improvements */
+            .modal-dialog {
+                margin: 0.5rem;
+                max-width: calc(100% - 1rem);
+            }
+            
+            /* Mobile card improvements */
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+            
+            /* Mobile spacing */
+            .container-fluid {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            
+            /* Mobile chart improvements */
+            .chart-container {
+                height: 250px;
+            }
+            
+            /* Mobile filter improvements */
+            .mobile-filters .col-md-4 {
+                margin-bottom: 1rem;
+            }
+            
+            /* Mobile badge improvements */
+            .badge {
+                font-size: 0.75rem;
+                padding: 0.5rem 0.75rem;
+            }
+        }
+        
+        /* Tablet improvements */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .btn {
+                min-height: 40px;
+                padding: 0.5rem 0.75rem;
+            }
+            
+            .mobile-action-buttons {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            
+            .mobile-action-buttons .btn {
+                flex: 1;
+                min-width: 120px;
+            }
+        }
+        
+        /* General improvements */
+        .btn-group .btn {
+            min-width: 60px;
+        }
+        
+        .table-responsive {
+            border-radius: 0.375rem;
+        }
+        
+        /* Better focus states for accessibility */
+        .btn:focus,
+        .form-control:focus,
+        .form-select:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+    </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>

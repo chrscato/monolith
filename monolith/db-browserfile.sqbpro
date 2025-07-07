@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="C:/Users/ChristopherCato/OneDrive - clarity-dx.com/code/monolith/monolith.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="10644"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/><expanded_item id="4" parent="1"/></tab_structure><tab_browse><table title="ProviderBill" custom_title="0" dock_id="12" table="4,12:mainProviderBill"/><dock_state state="000000ff00000000fd0000000100000002000004f200000260fc010000000bfb000000160064006f0063006b00420072006f00770073006500310100000000000004f20000000000000000fb000000160064006f0063006b00420072006f00770073006500320100000000000004f20000000000000000fb000000160064006f0063006b00420072006f00770073006500330100000000000004f20000000000000000fb000000160064006f0063006b00420072006f00770073006500340100000000000004f20000000000000000fb000000160064006f0063006b00420072006f00770073006500350100000000000004f20000000000000000fb000000160064006f0063006b00420072006f00770073006500360100000000000004f20000000000000000fc00000000000004f20000000000fffffffa000000000100000002fb000000160064006f0063006b00420072006f00770073006500370100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500380100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500390100000000000004f20000000000000000fb000000180064006f0063006b00420072006f007700730065003100300100000000000005f20000000000000000fb000000180064006f0063006b00420072006f007700730065003100310100000000000004f20000000000000000fb000000180064006f0063006b00420072006f007700730065003100320100000000000004f20000011100ffffff000002b10000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="AdjustmentReason" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="32"/><column index="2" value="46"/><column index="3" value="45"/><column index="4" value="81"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="ProviderBill" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="5" mode="1"/></sort><column_widths><column index="1" value="288"/><column index="2" value="288"/><column index="3" value="91"/><column index="4" value="300"/><column index="5" value="93"/><column index="6" value="510"/><column index="7" value="210"/><column index="8" value="257"/><column index="9" value="109"/><column index="10" value="85"/><column index="11" value="300"/><column index="12" value="300"/><column index="13" value="132"/><column index="14" value="300"/><column index="15" value="88"/><column index="16" value="202"/><column index="17" value="218"/><column index="18" value="65"/><column index="19" value="156"/></column_widths><filter_values><column index="16" value="update_prov_info"/></filter_values><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="order_line_items" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="39"/><column index="2" value="288"/><column index="3" value="85"/><column index="4" value="54"/><column index="5" value="66"/><column index="6" value="47"/><column index="7" value="300"/><column index="8" value="62"/><column index="9" value="88"/><column index="10" value="156"/><column index="11" value="156"/><column index="12" value="67"/><column index="13" value="64"/><column index="14" value="62"/><column index="15" value="96"/><column index="16" value="96"/><column index="17" value="127"/><column index="18" value="85"/><column index="19" value="111"/></column_widths><filter_values><column index="1" value="ORD-2025223634-HALLSHALMA"/></filter_values><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="orders" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="288"/><column index="2" value="171"/><column index="3" value="300"/><column index="4" value="163"/><column index="5" value="93"/><column index="6" value="85"/><column index="7" value="132"/><column index="8" value="300"/><column index="9" value="89"/><column index="10" value="148"/><column index="11" value="140"/><column index="12" value="234"/><column index="13" value="117"/><column index="14" value="210"/><column index="15" value="157"/><column index="16" value="273"/><column index="17" value="187"/><column index="18" value="132"/><column index="19" value="83"/><column index="20" value="118"/><column index="21" value="156"/><column index="22" value="156"/><column index="23" value="67"/><column index="24" value="88"/><column index="25" value="288"/><column index="26" value="300"/><column index="27" value="85"/><column index="28" value="87"/><column index="29" value="79"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">-- Pseudocode-style SQL join
+SELECT
+    gpci.locality_name,
+    rvu.procedure_code,
+    rvu.modifier,
+    ROUND((
+        rvu.work_rvu * gpci.work_gpci +
+        rvu.practice_expense_rvu * gpci.pe_gpci +
+        rvu.malpractice_rvu * gpci.mp_gpci
+    ) * cf.conversion_factor, 6) AS medicare_rate
+FROM cms_rvu rvu
+JOIN cms_conversion_factor cf ON rvu.year = cf.year
+-- First isolate the correct locality_code from zip code
+JOIN (
+    SELECT locality_code
+    FROM medicare_locality_map
+    WHERE zip_code = '15044'
+      AND year_qtr LIKE '2025%'  -- or use your target year prefix
+    LIMIT 1
+) AS matched_map ON 1=1
+-- Now only join the GPCI for that locality and year
+JOIN cms_gpci gpci ON gpci.locality_code = matched_map.locality_code AND gpci.year = rvu.year
+JOIN medicare_locality_meta mlm ON 
+WHERE rvu.procedure_code = '73721';
+
+--  AND map.year_qtr LIKE :year_prefix || '%'
+</sql><sql name="SQL 2*">UPDATE ProviderBill
+SET status = 'MAPPED'
+WHERE id in (
+SELECT distinct pb.id
+from ProviderBill pb
+where claim_id is not null
+and status = 'INVALID');
+
+
+
+SELECT count(distinct pb.id)
+from ProviderBill pb
+where claim_id is not null
+and status = 'INVALID'
+
+
+
+                SELECT 
+                    status,
+                    COUNT(*) as count,
+                    MIN(created_at) as first_occurrence,
+                    MAX(created_at) as last_occurrence
+                FROM ProviderBill
+                WHERE status IS NOT NULL
+                GROUP BY status
+                ORDER BY count DESC</sql><sql name="SQL 3*">-- Query to examine the ProviderBill records for the test bills
+SELECT 
+    id,
+    status,
+    action,
+    bill_paid,
+    patient_name,
+    patient_dob,
+    patient_zip,
+    billing_provider_name,
+    billing_provider_address,
+    billing_provider_tin,
+    billing_provider_npi,
+    total_charge,
+    patient_account_no,
+    created_at,
+    updated_at
+FROM ProviderBill 
+WHERE id IN (
+    '21a240f7-b72f-42ca-8991-70f1ce4296e8',
+    '23d9dc5f-e93f-44f9-92b1-6b2ccc3bca79',
+    '2cc11e49-abb7-4c7c-bb5c-ccf4d50dd6aa',
+    '3722a3c6-d223-4bca-a8dc-46ab06a60866',
+    '38c39001-3dff-407d-979e-0d67c5ab2742'
+)
+ORDER BY created_at;
+
+-- Query to examine the BillLineItem records for the test bills
+SELECT 
+    bli.id,
+    bli.provider_bill_id,
+    bli.cpt_code,
+    bli.modifier,
+    bli.units,
+    bli.charge_amount,
+    bli.allowed_amount,
+    bli.decision,
+    bli.reason_code,
+    bli.date_of_service,
+    bli.place_of_service,
+    bli.diagnosis_pointer
+    --bli.created_at
+FROM BillLineItem bli
+WHERE bli.provider_bill_id IN (
+    '21a240f7-b72f-42ca-8991-70f1ce4296e8',
+    '23d9dc5f-e93f-44f9-92b1-6b2ccc3bca79',
+    '2cc11e49-abb7-4c7c-bb5c-ccf4d50dd6aa',
+    '3722a3c6-d223-4bca-a8dc-46ab06a60866',
+    '38c39001-3dff-407d-979e-0d67c5ab2742'
+)
+ORDER BY bli.provider_bill_id, bli.id;
+
+-- Summary query showing bill counts and line item counts
+SELECT 
+    pb.id,
+    pb.status,
+    pb.billing_provider_name,
+    pb.total_charge,
+    COUNT(bli.id) as line_item_count,
+    SUM(bli.charge_amount) as line_items_total
+FROM ProviderBill pb
+LEFT JOIN BillLineItem bli ON pb.id = bli.provider_bill_id
+WHERE pb.id IN (
+    '21a240f7-b72f-42ca-8991-70f1ce4296e8',
+    '23d9dc5f-e93f-44f9-92b1-6b2ccc3bca79',
+    '2cc11e49-abb7-4c7c-bb5c-ccf4d50dd6aa',
+    '3722a3c6-d223-4bca-a8dc-46ab06a60866',
+    '38c39001-3dff-407d-979e-0d67c5ab2742'
+)
+GROUP BY pb.id, pb.status, pb.billing_provider_name, pb.total_charge
+ORDER BY pb.created_at;
+
+-- Query to check for the specific NPI validation issues
+SELECT 
+    id,
+    billing_provider_name,
+    billing_provider_npi,
+    CASE 
+        WHEN billing_provider_npi IS NULL THEN 'NULL'
+        WHEN LENGTH(billing_provider_npi) != 10 THEN 'Wrong length'
+        WHEN billing_provider_npi NOT REGEXP '^[0-9]+$' THEN 'Contains non-digits'
+        ELSE 'Valid'
+    END as npi_validation_status
+FROM ProviderBill 
+WHERE id IN (
+    '21a240f7-b72f-42ca-8991-70f1ce4296e8',
+    '23d9dc5f-e93f-44f9-92b1-6b2ccc3bca79',
+    '2cc11e49-abb7-4c7c-bb5c-ccf4d50dd6aa',
+    '3722a3c6-d223-4bca-a8dc-46ab06a60866',
+    '38c39001-3dff-407d-979e-0d67c5ab2742'
+)
+ORDER BY id;</sql><sql name="SQL 4*">SELECT
+  CASE
+    WHEN last_error LIKE '%Date of service error%' THEN 'Date of service error'
+    WHEN last_error LIKE '%Invalid CPT code format%' THEN 'Invalid CPT code format'
+    WHEN last_error LIKE '%Total charge mismatch%' THEN 'Total charge mismatch'
+    ELSE 'Other'
+  END AS error_category,
+  COUNT(*) AS count
+FROM ProviderBill
+WHE status = 'INVALID'
+GROUP BY error_category
+ORDER BY count DESC;
+</sql><sql name="SQL 5*">SELECT id, last_error, COUNT(*) as count, crea
+FROM ProviderBill
+WHERE status = 'INVALID'
+  AND last_error NOT LIKE '%Date of service error%'
+  AND last_error NOT LIKE '%Invalid CPT code format%'
+  AND last_error NOT LIKE '%Total charge mismatch%'
+GROUP BY last_error
+ORDER BY count DESC;
+</sql><sql name="SQL 6*">/* copy the state_name from the 01-locality of the same MAC */
+UPDATE medicare_locality_meta AS m99
+SET    state_name = (
+          SELECT state_name
+          FROM   medicare_locality_meta m01
+          WHERE  m01.mac_code      = m99.mac_code
+            AND  m01.locality_code = '01'
+          LIMIT  1
+      )
+WHERE  locality_code = '99'
+  AND  (state_name IS NULL OR TRIM(state_name) = '');
+</sql><sql name="SQL 7*">ALTER TABLE referrals ADD COLUMN assigned_provider TEXT;
+</sql><sql name="SQL 8*">ALTER TABLE referrals ADD COLUMN processed BOOLEAN DEFAULT 0;</sql><sql name="SQL 9*">SELECT status, action, COUNT(*) as count
+FROM ProviderBill
+GROUP BY status, action
+ORDER BY count desc
+
+</sql><sql name="SQL 10*">SELECT
+p.DBA Name Billing Name
+,p.City
+,p.state
+,p.lat 
+,p.lon 
+,p.Provider Type
+,count(*) as referral_volume
+
+FROM providers p
+JOIN orders o
+ON p.PrimaryKey = o.provider_id
+GROUP BY </sql><sql name="SQL 11*">UPDATE ProviderBill
+SET action='correct_cpt'
+WHERE last_error like '%Invalid CPT code format%';</sql><sql name="SQL 12*">SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';
+</sql><sql name="SQL 13*">select 
+procedure_code
+,modifier
+,region_id
+,place_of_service
+,service_type
+,rate_unit
+,rate
+from fee_schedule_rate
+where fsr.procedure_code = ?
+and fsr.state = ?</sql><sql name="SQL 14*">UPDATE fee_schedule_rate
+SET state = (
+    SELECT fs.state_code
+    FROM fee_schedule fs
+    WHERE fs.id = fee_schedule_rate.fee_schedule_id
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM fee_schedule fs
+    WHERE fs.id = fee_schedule_rate.fee_schedule_id
+);
+</sql><sql name="SQL 15*">                SELECT 
+                    status,
+                    COUNT(*) as count,
+                    MIN(created_at) as first_occurrence,
+                    MAX(created_at) as last_occurrence
+                FROM ProviderBill
+                WHERE status IS NOT NULL
+                GROUP BY status
+                ORDER BY count DESC</sql><sql name="SQL 16*">-- Reset all bills that were processed by map_bill.py
+UPDATE ProviderBill 
+SET status = 'VALID', 
+    action = 'to_map', 
+    claim_id = NULL, 
+    last_error = NULL
+WHERE status IN ('UNMAPPED', 'MAPPED', 'DUPLICATE') 
+  AND action IN ('to_map', 'to_review');</sql><sql name="SQL 17*">DROP TABLE IF EXISTS temp_unmatched_orders;
+
+CREATE TEMP TABLE temp_unmatched_orders AS
+SELECT DISTINCT
+    o.Order_ID,
+    o.provider_id,
+    o.provider_name
+FROM orders o
+JOIN providerbill pb ON o.Order_ID = pb.claim_id
+LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
+WHERE p.PrimaryKey IS NULL;
+
+
+
+select count(*) from temp_unmatched_orders;</sql><sql name="SQL 18*">CREATE TEMP TABLE temp_unmatched_orders AS
+SELECT DISTINCT
+    o.Order_ID,
+    o.provider_id,
+    o.provider_name
+FROM orders o
+JOIN providerbill pb ON o.Order_ID = pb.claim_id
+LEFT JOIN providers p ON o.provider_id = p.PrimaryKey
+WHERE p.PrimaryKey IS NULL;
+
+
+
+UPDATE orders
+SET provider_id = (
+    SELECT p.PrimaryKey
+    FROM providers p
+    WHERE p.[DBA Name Billing Name] = orders.provider_name
+)
+WHERE Order_ID IN (
+    SELECT t.Order_ID
+    FROM temp_unmatched_orders t
+    JOIN providers p ON t.provider_name = p.[DBA Name Billing Name]
+    GROUP BY t.Order_ID, t.provider_name
+    HAVING COUNT(DISTINCT p.PrimaryKey) = 1
+);
+</sql><sql name="SQL 19*">select distinct status, action, last_error, count(*)
+from ProviderBill
+where action = 'update_prov_info'
+group by status, action, last_error
+order by count(*) desc;
+
+
+
+update ProviderBill
+set status = 'MAPPED', action = 'to_review'
+where last_error = 'Provider information not found'</sql><current_tab id="10"/></tab_sql></sqlb_project>
