@@ -4,14 +4,14 @@
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
+        <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
                     <h2 class="h5 mb-0">Add PPO Rate</h2>
                 </div>
                 <div class="card-body">
                     {% if messages %}
-                    <div class="messages mb-3">
+                    <div class="messages">
                         {% for message in messages %}
                         <div class="alert alert-{{ message.tags }}">
                             {{ message }}
@@ -20,7 +20,7 @@
                     </div>
                     {% endif %}
 
-                    <form method="post" class="mobile-form">
+                    <form method="post">
                         {% csrf_token %}
                         
                         <!-- Hidden fields for required values -->
@@ -40,7 +40,7 @@
                         <!-- Editable fields -->
                         <div class="mb-3">
                             <label class="form-label">Procedure Description</label>
-                            {{ form.proc_desc|add_class:"form-control" }}
+                            {{ form.proc_desc }}
                             {% if form.proc_desc.errors %}
                                 <div class="invalid-feedback d-block">
                                     {{ form.proc_desc.errors }}
@@ -50,7 +50,7 @@
 
                         <div class="mb-3">
                             <label class="form-label">Procedure Category</label>
-                            {{ form.proc_category|add_class:"form-control" }}
+                            {{ form.proc_category }}
                             {% if form.proc_category.errors %}
                                 <div class="invalid-feedback d-block">
                                     {{ form.proc_category.errors }}
@@ -58,9 +58,9 @@
                             {% endif %}
                         </div>
 
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <label class="form-label">Rate</label>
-                            {{ form.rate|add_class:"form-control" }}
+                            {{ form.rate }}
                             {% if form.rate.errors %}
                                 <div class="invalid-feedback d-block">
                                     {{ form.rate.errors }}
@@ -68,9 +68,9 @@
                             {% endif %}
                         </div>
 
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">Save Rate</button>
+                        <div class="d-flex justify-content-between">
                             <a href="{% url 'bill_review:bill_detail' bill_id %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Save Rate</button>
                         </div>
                     </form>
                 </div>

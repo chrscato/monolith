@@ -25,57 +25,39 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block content %}
 <div class="container-fluid mt-4">
     <!-- Action Buttons -->
-    <div class="mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h1>Bill Details</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Bill Details</h1>
+        <div class="d-flex gap-2">
             <a href="{% url 'bill_review:dashboard' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Back to Dashboard
             </a>
-        </div>
-        
-        <!-- Mobile-optimized action buttons -->
-        <div class="mobile-action-buttons">
-            <div class="row g-2">
-                <div class="col-6 col-md-3">
-                    <a href="{% url 'bill_review:view_bill_pdf' bill.id %}" class="btn btn-info w-100" target="_blank">
-                        <i class="fas fa-file-pdf"></i> View PDF
-                    </a>
-                </div>
-                <div class="col-6 col-md-3">
-                    <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#escalateModal">
-                        <i class="fas fa-exclamation-triangle"></i> ESCALATE
-                    </button>
-                </div>
-                <div class="col-6 col-md-3">
-                    <button type="button" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#approveModal">
-                        <i class="fas fa-check-circle"></i> APPROVE
-                    </button>
-                </div>
-                <div class="col-6 col-md-3">
-                    <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#denyModal">
-                        <i class="fas fa-ban"></i> DENY
-                    </button>
-                </div>
-                <div class="col-6 col-md-3">
-                    <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" class="d-inline w-100">
-                        {% csrf_token %}
-                        <button type="submit" name="reset_bill" class="btn btn-warning w-100" onclick="return confirm('Reset this bill to MAPPED status?')">
-                            Reset to MAPPED
-                        </button>
-                    </form>
-                </div>
-                <div class="col-6 col-md-3">
-                    <form method="post" action="{% url 'bill_review:update_bill' bill.id %}" class="d-inline w-100">
-                        {% csrf_token %}
-                        <input type="hidden" name="status" value="GARBAGE">
-                        <input type="hidden" name="action" value="">
-                        <input type="hidden" name="last_error" value="not a bill">
-                        <button type="submit" class="btn btn-danger w-100" onclick="return confirm('Are you sure you want to mark this bill as garbage?')">
-                            <i class="fas fa-trash"></i> GARBAGE
-                        </button>
-                    </form>
-                </div>
-            </div>
+            <a href="{% url 'bill_review:view_bill_pdf' bill.id %}" class="btn btn-info" target="_blank">
+                <i class="fas fa-file-pdf"></i> View PDF
+            </a>
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#escalateModal">
+                <i class="fas fa-exclamation-triangle"></i> ESCALATE
+            </button>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="fas fa-check-circle"></i> APPROVE
+            </button>
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#denyModal">
+                <i class="fas fa-ban"></i> DENY
+            </button>
+            <form method="post" action="{% url 'bill_review:reset_bill' bill.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" name="reset_bill" class="btn btn-warning" onclick="return confirm('Reset this bill to MAPPED status?')">
+                    Reset to MAPPED
+                </button>
+            </form>
+            <form method="post" action="{% url 'bill_review:update_bill' bill.id %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="GARBAGE">
+                <input type="hidden" name="action" value="">
+                <input type="hidden" name="last_error" value="not a bill">
+                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to mark this bill as garbage?')">
+                    <i class="fas fa-trash"></i> GARBAGE
+                </button>
+            </form>
         </div>
     </div>
 

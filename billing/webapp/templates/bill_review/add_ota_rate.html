@@ -4,13 +4,13 @@
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
+        <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
                     <h2 class="h5 mb-0">Add OTA Rate</h2>
                 </div>
                 <div class="card-body">
-                    <form method="post" class="mobile-form">
+                    <form method="post">
                         {% csrf_token %}
                         
                         <!-- Read-only line item details -->
@@ -24,7 +24,7 @@
                         </div>
 
                         <!-- Rate field -->
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <label class="form-label">Rate</label>
                             {{ form.rate|add_class:"form-control" }}
                             {% if form.rate.errors %}
@@ -34,9 +34,9 @@
                             {% endif %}
                         </div>
 
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">Save Rate</button>
+                        <div class="d-flex justify-content-between">
                             <a href="{% url 'bill_review:bill_detail' bill_id %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Save Rate</button>
                         </div>
                     </form>
                 </div>
