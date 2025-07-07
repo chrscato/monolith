@@ -18,42 +18,6 @@ document.addEventListener('DOMContentLoaded', function() {
             denyAction.value = '';
         }
     });
-    
-    // Mobile modal improvements
-    const modals = document.querySelectorAll('.modal');
-    
-    modals.forEach(modal => {
-        // Prevent body scroll when modal is open on mobile
-        modal.addEventListener('show.bs.modal', function() {
-            if (window.innerWidth <= 768) {
-                document.body.style.overflow = 'hidden';
-            }
-        });
-        
-        modal.addEventListener('hidden.bs.modal', function() {
-            document.body.style.overflow = '';
-        });
-        
-        // Improve focus management for mobile
-        modal.addEventListener('shown.bs.modal', function() {
-            const firstInput = modal.querySelector('input, textarea, select, button:not(.btn-close)');
-            if (firstInput) {
-                firstInput.focus();
-            }
-        });
-    });
-    
-    // Add touch feedback for modal buttons
-    const modalButtons = document.querySelectorAll('.modal .btn');
-    modalButtons.forEach(button => {
-        button.addEventListener('touchstart', function() {
-            this.style.transform = 'scale(0.98)';
-        });
-        
-        button.addEventListener('touchend', function() {
-            this.style.transform = '';
-        });
-    });
 });
 </script>
 {% endblock %}
@@ -117,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Escalate Modal -->
     <div class="modal fade" id="escalateModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-dialog">
             <div class="modal-content">
                 <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
                     {% csrf_token %}
@@ -126,19 +90,16 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-4">
-                            <label for="escalateMessage" class="form-label fw-bold">Escalation Message</label>
-                            <textarea class="form-control mobile-form-control" id="escalateMessage" name="last_error" rows="4" placeholder="Enter escalation message..." required></textarea>
-                            <div class="form-text">Please provide a clear reason for escalating this bill.</div>
+                        <div class="mb-3">
+                            <label for="escalateMessage" class="form-label">Escalation Message</label>
+                            <textarea class="form-control" id="escalateMessage" name="last_error" rows="3" required></textarea>
                         </div>
                         <input type="hidden" name="status" value="ESCALATE">
                         <input type="hidden" name="action" value="resolve_escalation">
                     </div>
-                    <div class="modal-footer flex-column gap-2">
-                        <div class="d-grid gap-2 w-100">
-                            <button type="submit" class="btn btn-warning btn-lg">Escalate Bill</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning">Escalate</button>
                     </div>
                 </form>
             </div>
@@ -147,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Approve Modal -->
     <div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-dialog">
             <div class="modal-content">
                 <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
                     {% csrf_token %}
@@ -156,31 +117,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">Select Approval Type</label>
-                            <div class="d-grid gap-3">
-                                <button type="submit" class="btn btn-outline-success btn-lg" name="action" value="review_rate">
-                                    <i class="fas fa-calculator me-2"></i> 
-                                    <div class="d-flex flex-column align-items-start">
-                                        <span class="fw-bold">Approve to Apply Rate</span>
-                                        <small class="text-muted">Review and apply pricing</small>
-                                    </div>
+                        <div class="mb-3">
+                            <label class="form-label">Select Approval Type</label>
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-outline-success" name="action" value="review_rate">
+                                    <i class="fas fa-calculator"></i> Approve to Apply Rate
                                 </button>
-                                <button type="submit" class="btn btn-outline-success btn-lg" name="action" value="apply_rate">
-                                    <i class="fas fa-file-invoice me-2"></i> 
-                                    <div class="d-flex flex-column align-items-start">
-                                        <span class="fw-bold">Approve for EOBR</span>
-                                        <small class="text-muted">Generate explanation of benefits</small>
-                                    </div>
+                                <button type="submit" class="btn btn-outline-success" name="action" value="apply_rate">
+                                    <i class="fas fa-file-invoice"></i> Approve for EOBR
                                 </button>
                             </div>
                         </div>
                         <input type="hidden" name="status" value="REVIEWED">
                     </div>
-                    <div class="modal-footer flex-column gap-2">
-                        <div class="d-grid gap-2 w-100">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     </div>
                 </form>
             </div>
@@ -189,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Deny Modal -->
     <div class="modal fade" id="denyModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Deny Bill</h5>
@@ -198,23 +149,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
                     {% csrf_token %}
                     <div class="modal-body">
-                        <div class="mb-4">
-                            <label for="denyReason" class="form-label fw-bold">Denial Reason</label>
-                            <select class="form-select mobile-form-control" id="denyReason" name="last_error" required>
+                        <div class="mb-3">
+                            <label for="denyReason" class="form-label">Denial Reason</label>
+                            <select class="form-select" id="denyReason" name="last_error" required>
                                 <option value="">Select a reason...</option>
                                 <option value="CO-50 - These are non-covered services">CO-50 - These are non-covered services</option>
                                 <option value="Claim not found in FileMaker">Claim not found in FileMaker</option>
                             </select>
-                            <div class="form-text">Please select the appropriate denial reason.</div>
                         </div>
                         <input type="hidden" name="status" value="DENIED">
                         <input type="hidden" name="action" id="denyAction" value="">
                     </div>
-                    <div class="modal-footer flex-column gap-2">
-                        <div class="d-grid gap-2 w-100">
-                            <button type="submit" class="btn btn-danger btn-lg">Deny Bill</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">Deny</button>
                     </div>
                 </form>
             </div>

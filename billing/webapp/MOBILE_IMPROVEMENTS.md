@@ -26,14 +26,6 @@ This document outlines the mobile-specific improvements made to the billing weba
 - **Mobile-First Layout**: Action buttons now stack properly on mobile (2 columns) vs desktop (6 columns)
 - **Better Spacing**: Improved margins and padding for mobile screens
 - **Touch Optimization**: All action buttons are now full-width on mobile for easier tapping
-- **Mobile Modal Enhancements**: 
-  - Full-screen modals on mobile devices (`modal-fullscreen-sm-down`)
-  - Larger touch targets (48px minimum height)
-  - Better form controls with 16px font size
-  - Improved button layout with vertical stacking
-  - Enhanced approval buttons with descriptions
-  - Touch feedback and focus management
-  - Body scroll prevention when modals are open
 
 ### 4. Form Improvements
 #### Add OTA Rate Form (`add_ota_rate.html`)
@@ -50,12 +42,7 @@ This document outlines the mobile-specific improvements made to the billing weba
 ### 5. Mobile CSS File (`static/css/mobile.css`)
 - **Comprehensive Mobile Styles**: Dedicated CSS file with mobile-first approach
 - **Touch Targets**: Minimum 44px height for all interactive elements
-- **Modal Improvements**: 
-  - Full-screen modals on mobile with proper height management
-  - Enhanced form controls with mobile-specific styling
-  - Better button layouts with improved touch targets
-  - Approval buttons with descriptive text and icons
-  - Improved close button sizing and positioning
+- **Modal Improvements**: Better modal sizing and button layout for mobile
 - **Table Responsiveness**: Mobile-optimized table styling with proper text wrapping
 - **Form Enhancements**: Better form control styling and validation display
 - **Accessibility**: Improved focus states and keyboard navigation
