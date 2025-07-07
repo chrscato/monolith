@@ -1,5 +1,6 @@
 import sqlite3
 import logging
+import os
 from typing import List, Optional
 from datetime import datetime
 
@@ -10,8 +11,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_db_connection(db_path: str = "monolith.db") -> sqlite3.Connection:
+def get_db_connection(db_path: str = None) -> sqlite3.Connection:
     """Get a connection to the SQLite database."""
+    if db_path is None:
+        db_path = os.getenv("MONOLITH_DB_PATH", "monolith.db")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn

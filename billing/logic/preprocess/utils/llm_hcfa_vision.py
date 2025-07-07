@@ -168,7 +168,9 @@ def extract_via_llm(pdf_path: str) -> dict:
 #  SQLite update  (same logic as legacy script)
 # ─────────────────────────────────────────────────────────────────────────────
 def update_provider_bill(bill_id: str, extracted: dict) -> bool:
-    db_path = r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db"
+    """Update ProviderBill and BillLineItem records using extracted data."""
+    # Path to SQLite DB can be configured via the MONOLITH_DB_PATH env variable
+    db_path = os.getenv("MONOLITH_DB_PATH", str(PROJECT_ROOT / "monolith.db"))
     
     # Add retry logic for database lock issues
     max_retries = 3
