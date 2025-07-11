@@ -2,6 +2,138 @@
 {% extends "base.html" %}
 {% load widget_tweaks %}
 
+{% block extra_css %}
+<style>
+/* Mobile-specific modal improvements */
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+        max-height: calc(100vh - 1rem);
+    }
+    
+    .modal-content {
+        max-height: calc(100vh - 1rem);
+        overflow-y: auto;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+    }
+    
+    .modal-footer {
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .modal-footer .btn {
+        flex: 1;
+        min-width: 120px;
+    }
+    
+    /* Improve table responsiveness on mobile */
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .table th, .table td {
+        padding: 0.5rem 0.25rem;
+        white-space: nowrap;
+    }
+    
+    /* Make action buttons more touch-friendly */
+    .btn-group .btn {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    /* Stack buttons vertically on very small screens */
+    @media (max-width: 576px) {
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .btn-group .btn {
+            width: 100%;
+        }
+    }
+}
+
+/* Ensure modals are always accessible */
+.modal {
+    z-index: 1055;
+}
+
+.modal-backdrop {
+    z-index: 1050;
+}
+
+/* Improve form layout on mobile */
+@media (max-width: 768px) {
+    .form-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-control, .form-select {
+        margin-bottom: 1rem;
+    }
+    
+    .modal-body .row {
+        margin: 0;
+    }
+    
+    .modal-body .col-md-6 {
+        padding: 0;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Existing styles */
+.table-responsive {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.comparison-highlight {
+    background-color: #fff3cd !important;
+    animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0%, 100% { background-color: #fff3cd; }
+    50% { background-color: #ffeaa7; }
+}
+
+.table-bordered td, .table-bordered th {
+    border-width: 1px;
+}
+
+.table th {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.table td {
+    font-size: 0.875rem;
+    vertical-align: middle;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+</style>
+{% endblock %}
+
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -17,6 +149,38 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             denyAction.value = '';
         }
+    });
+    
+    // Mobile-specific modal improvements
+    function improveModalMobile() {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            modal.addEventListener('show.bs.modal', function() {
+                // Ensure modal is properly positioned on mobile
+                if (window.innerWidth <= 768) {
+                    this.style.display = 'block';
+                    this.style.paddingLeft = '0px';
+                    this.style.paddingRight = '0px';
+                }
+            });
+            
+            modal.addEventListener('shown.bs.modal', function() {
+                // Scroll to top of modal content on mobile
+                if (window.innerWidth <= 768) {
+                    const modalContent = this.querySelector('.modal-content');
+                    if (modalContent) {
+                        modalContent.scrollTop = 0;
+                    }
+                }
+            });
+        });
+    }
+    
+    improveModalMobile();
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        improveModalMobile();
     });
 });
 </script>
@@ -907,7 +1071,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                     </div>
 
-                    <div class="table-responsive">
+                    <!-- Desktop Table View -->
+                    <div class="table-responsive d-none d-md-block">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -957,54 +1122,60 @@ document.addEventListener('DOMContentLoaded', function() {
 
                                 <!-- Edit Line Item Modal -->
                                 <div class="modal fade" id="editLineItem{{ item.id }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog">
+                                    <div class="modal-dialog modal-lg">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title">Edit Line Item</h5>
+                                                <h5 class="modal-title">Edit Line Item - {{ item.cpt_code }}</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <form method="post" action="{% url 'bill_review:line_item_update' item.id %}">
                                                 {% csrf_token %}
                                                 <div class="modal-body">
-                                                    <div class="mb-3">
-                                                        <label class="form-label">CPT Code</label>
-                                                        <input type="text" name="cpt_code" class="form-control" value="{{ item.cpt_code }}" required>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Modifier</label>
-                                                        <input type="text" name="modifier" class="form-control" value="{{ item.modifier|default:'' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Units</label>
-                                                        <input type="number" name="units" class="form-control" value="{{ item.units }}" required>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Charge Amount</label>
-                                                        <input type="number" step="0.01" name="charge_amount" class="form-control" value="{{ item.charge_amount }}" required>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Allowed Amount</label>
-                                                        <input type="number" step="0.01" name="allowed_amount" class="form-control" value="{{ item.allowed_amount|default:'' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Decision</label>
-                                                        <select name="decision" class="form-select" required>
-                                                            <option value="pending" {% if item.decision == 'pending' %}selected{% endif %}>Pending</option>
-                                                            <option value="approved" {% if item.decision == 'approved' %}selected{% endif %}>Approved</option>
-                                                            <option value="denied" {% if item.decision == 'denied' %}selected{% endif %}>Denied</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Reason Code</label>
-                                                        <input type="text" name="reason_code" class="form-control" value="{{ item.reason_code|default:'' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Date of Service</label>
-                                                        <input type="date" name="date_of_service" class="form-control" value="{{ item.date_of_service }}">
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">CPT Code *</label>
+                                                                <input type="text" name="cpt_code" class="form-control" value="{{ item.cpt_code }}" required>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Modifier</label>
+                                                                <input type="text" name="modifier" class="form-control" value="{{ item.modifier|default:'' }}" placeholder="Optional modifier">
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Units *</label>
+                                                                <input type="number" name="units" class="form-control" value="{{ item.units }}" min="1" required>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Date of Service *</label>
+                                                                <input type="date" name="date_of_service" class="form-control" value="{{ item.date_of_service }}" required>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Charge Amount *</label>
+                                                                <input type="number" step="0.01" name="charge_amount" class="form-control" value="{{ item.charge_amount }}" required>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Allowed Amount</label>
+                                                                <input type="number" step="0.01" name="allowed_amount" class="form-control" value="{{ item.allowed_amount|default:'' }}" placeholder="0.00">
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Decision *</label>
+                                                                <select name="decision" class="form-select" required>
+                                                                    <option value="pending" {% if item.decision == 'pending' %}selected{% endif %}>Pending</option>
+                                                                    <option value="approved" {% if item.decision == 'approved' %}selected{% endif %}>Approved</option>
+                                                                    <option value="denied" {% if item.decision == 'denied' %}selected{% endif %}>Denied</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Reason Code</label>
+                                                                <input type="text" name="reason_code" class="form-control" value="{{ item.reason_code|default:'' }}" placeholder="Optional reason code">
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                                                     <button type="submit" class="btn btn-primary">Save Changes</button>
                                                 </div>
                                             </form>
@@ -1038,6 +1209,82 @@ document.addEventListener('DOMContentLoaded', function() {
                                 {% endfor %}
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Mobile Card View -->
+                    <div class="d-md-none">
+                        {% for item in bill_items %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">{{ item.cpt_code }}</h6>
+                                <span class="badge {% if item.decision == 'approved' %}bg-success{% elif item.decision == 'denied' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ item.decision }}
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Category</small>
+                                        <p class="mb-2">{% if item.cpt_code in cpt_categories %}{{ cpt_categories|get_category:item.cpt_code }}{% else %}-{% endif %}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Modifier</small>
+                                        <p class="mb-2">{{ item.modifier|default:"-" }}</p>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Units</small>
+                                        <p class="mb-2">{{ item.units }}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Date of Service</small>
+                                        <p class="mb-2">{{ item.date_of_service }}</p>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Charge Amount</small>
+                                        <p class="mb-2">${{ item.charge_amount }}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Allowed Amount</small>
+                                        <p class="mb-2">${{ item.allowed_amount|default:"-" }}</p>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">In-Network Rate</small>
+                                        <p class="mb-2">${{ in_network_rates|get_item:item.cpt_code|default:"-" }}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Out-Network Rate</small>
+                                        <p class="mb-2">${{ out_network_rates|get_item:item.cpt_code|default:"-" }}</p>
+                                    </div>
+                                </div>
+                                {% if item.reason_code %}
+                                <div class="row">
+                                    <div class="col-12">
+                                        <small class="text-muted">Reason</small>
+                                        <p class="mb-2">{{ item.reason_code }}</p>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                <div class="d-flex gap-2 mt-3">
+                                    <button type="button" class="btn btn-primary flex-fill" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
+                                        <i class="fas fa-edit me-1"></i>Edit
+                                    </button>
+                                    <button type="button" class="btn btn-danger flex-fill" data-bs-toggle="modal" data-bs-target="#deleteLineItem{{ item.id }}">
+                                        <i class="fas fa-trash me-1"></i>Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle me-2"></i>No line items found
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

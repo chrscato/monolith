@@ -97,10 +97,50 @@ def _fix_charge(raw: str) -> str:
                 break
     return f"${val:.2f}"
 
+def validate_cpt_code(cpt: str) -> str:
+    """
+    Validate and clean CPT codes to ensure they match the correct format.
+    
+    Args:
+        cpt: Raw CPT code string
+        
+    Returns:
+        Validated CPT code or 'unknown' if invalid
+    """
+    if not cpt or cpt == "unknown":
+        return "unknown"
+    
+    # Remove whitespace and convert to uppercase
+    cleaned = str(cpt).strip().upper()
+    
+    # Check for exactly 5 characters
+    if len(cleaned) != 5:
+        print(f"   ⚠ Invalid CPT length '{cpt}' (length {len(cleaned)})")
+        return "unknown"
+    
+    # Check format: either all digits OR 1 letter + 4 digits
+    if cleaned.isdigit():
+        # All digits: 00000-99999
+        return cleaned
+    elif cleaned[0].isalpha() and cleaned[1:].isdigit():
+        # 1 letter + 4 digits: A0000-Z9999
+        return cleaned
+    else:
+        # Invalid format
+        print(f"   ⚠ Invalid CPT format '{cpt}' (should be 5 digits OR 1 letter + 4 digits)")
+        return "unknown"
+
 def normalise_charges(data: dict) -> dict:
     for line in data.get("service_lines", []):
         if line.get("charge_amount"):
             line["charge_amount"] = _fix_charge(line["charge_amount"])
+        # Validate CPT codes
+        if line.get("cpt_code"):
+            original_cpt = line["cpt_code"]
+            validated_cpt = validate_cpt_code(original_cpt)
+            if validated_cpt != original_cpt:
+                print(f"   ⚠ CPT validation: '{original_cpt}' → '{validated_cpt}'")
+            line["cpt_code"] = validated_cpt
     binfo = data.get("billing_info", {})
     if binfo.get("total_charge"):
         binfo["total_charge"] = _fix_charge(binfo["total_charge"])
