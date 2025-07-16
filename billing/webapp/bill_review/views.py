@@ -1033,17 +1033,19 @@ def bill_detail(request, bill_id):
                     normalized_date = normalize_date(date_value)
                     logger.info(f"Line item {item.get('id')}: Original date='{original_date}' (type: {type(original_date)}), Normalized date='{normalized_date}' (type: {type(normalized_date)})")
                     
-                    # Convert normalized date string back to date object for template formatting
+                    # Format the normalized date for display
                     if normalized_date and len(normalized_date) == 10 and normalized_date.count('-') == 2:
                         try:
+                            # Convert to date object and format nicely
                             date_obj = datetime.strptime(normalized_date, '%Y-%m-%d').date()
-                            item['date_of_service'] = date_obj
-                            logger.info(f"Line item {item.get('id')}: Converted to date object: {date_obj}")
+                            formatted_date = date_obj.strftime('%m/%d/%Y')
+                            item['date_of_service'] = formatted_date
+                            logger.info(f"Line item {item.get('id')}: Formatted date: {formatted_date}")
                         except ValueError:
-                            logger.warning(f"Line item {item.get('id')}: Could not convert '{normalized_date}' to date object, keeping as string")
+                            logger.warning(f"Line item {item.get('id')}: Could not format '{normalized_date}', keeping as string")
                             item['date_of_service'] = normalized_date
                     else:
-                        # Keep as string if not in YYYY-MM-DD format
+                        # Keep as string if not in YYYY-MM-DD format (like date ranges)
                         item['date_of_service'] = normalized_date
                 else:
                     logger.info(f"Line item {item.get('id')}: No date field found or date is None/empty")

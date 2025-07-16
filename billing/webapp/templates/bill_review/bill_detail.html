@@ -1122,7 +1122,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </td>
                                     <td>{{ item.reason_code|default:"-" }}</td>
                                     <td>{{ item.place_of_service|default:"-" }}</td>
-                                    <td>{% if item.date_of_service %}{% if item.date_of_service|date:"Y-m-d" != "None" %}{{ item.date_of_service|date:"M d, Y" }}{% else %}{{ item.date_of_service }}{% endif %}{% else %}-{% endif %}</td>
+                                    <td>{% if item.date_of_service %}{{ item.date_of_service }}{% else %}-{% endif %}</td>
                                     <td>
                                         <div class="btn-group">
                                             <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
@@ -1264,7 +1264,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <div class="row">
                                     <div class="col-6">
                                         <small class="text-muted">Date of Service</small>
-                                        <p class="mb-2">{% if item.date_of_service %}{% if item.date_of_service|date:"Y-m-d" != "None" %}{{ item.date_of_service|date:"M d, Y" }}{% else %}{{ item.date_of_service }}{% endif %}{% else %}-{% endif %}</p>
+                                        <p class="mb-2">{% if item.date_of_service %}{{ item.date_of_service }}{% else %}-{% endif %}</p>
                                     </div>
                                     <div class="col-6">
                                         <small class="text-muted">Decision</small>
