@@ -442,7 +442,13 @@ def get_bill_line_items(bill_id):
                 ORDER BY bli.date_of_service
             """, [bill_id])
             columns = [col[0] for col in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            items = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            # Debug: Log raw date values
+            for item in items:
+                logger.info(f"Line item {item.get('id')} raw date_of_service: '{item.get('date_of_service')}' (type: {type(item.get('date_of_service'))})")
+            
+            return items
     except Exception as e:
         logger.error(f"Error retrieving line items for bill {bill_id}: {e}")
         return []
@@ -713,19 +719,39 @@ def normalize_date(date_str):
     if not date_str:
         return None
     try:
+        # Convert to string if it's not already
+        date_str = str(date_str).strip()
+        
         # Handle date range format (e.g., "04/04/2025-04/04/2025")
-        if '-' in date_str:
+        if '-' in date_str and len(date_str.split('-')) > 1:
             date_str = date_str.split('-')[0].strip()
         
+        # If it's already in YYYY-MM-DD format, return as is
+        if len(date_str) == 10 and date_str.count('-') == 2:
+            return date_str
+        
+        # Handle year-only dates (e.g., "2023")
+        if len(date_str) == 4 and date_str.isdigit():
+            year = int(date_str)
+            if 1900 <= year <= 2100:
+                # Return the original year string instead of defaulting to January 1st
+                logger.info(f"Year-only date '{date_str}' - returning original value")
+                return date_str
+        
         # Try different date formats
-        for fmt in ['%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d']:
+        for fmt in ['%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d', '%m-%d-%Y', '%m-%d-%y']:
             try:
-                return datetime.strptime(date_str, fmt).strftime('%Y-%m-%d')
+                parsed_date = datetime.strptime(date_str, fmt)
+                return parsed_date.strftime('%Y-%m-%d')
             except ValueError:
                 continue
-        return None
-    except Exception:
-        return None
+        
+        # If we can't parse it, return the original string for display
+        logger.warning(f"Could not parse date: '{date_str}', returning original")
+        return date_str
+    except Exception as e:
+        logger.error(f"Error normalizing date '{date_str}': {e}")
+        return date_str
 
 def bill_detail(request, bill_id):
     """Show comprehensive details for a bill with all data needed for manual review."""
@@ -960,10 +986,19 @@ def bill_detail(request, bill_id):
             columns = [col[0] for col in cursor.description]
             bill_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
             
+            # Debug: Log raw date values from database
+            for item in bill_items:
+                logger.info(f"Raw line item {item.get('id')}: date_of_service = '{item.get('date_of_service')}' (type: {type(item.get('date_of_service'))})")
+            
             # Normalize dates for each line item
             for item in bill_items:
                 if 'date_of_service' in item:
-                    item['date_of_service'] = normalize_date(item['date_of_service'])
+                    original_date = item['date_of_service']
+                    normalized_date = normalize_date(item['date_of_service'])
+                    logger.info(f"Line item {item.get('id')}: Original date='{original_date}' (type: {type(original_date)}), Normalized date='{normalized_date}' (type: {type(normalized_date)})")
+                    item['date_of_service'] = normalized_date
+                else:
+                    logger.info(f"Line item {item.get('id')}: No date_of_service field found")
             
             # Get order details if claim_id exists
             order = {}
@@ -1169,7 +1204,13 @@ def bill_detail(request, bill_id):
                     if item.get('date_of_service'):
                         normalized = normalize_date(item['date_of_service'])
                         if normalized:
-                            dates.append(normalized)
+                            try:
+                                # Convert normalized string back to date object
+                                parsed_date = datetime.strptime(normalized, '%Y-%m-%d').date()
+                                dates.append(parsed_date)
+                            except ValueError:
+                                logger.warning(f"Could not parse normalized date '{normalized}' back to date object")
+                                continue
                 if dates:
                     target_date = min(dates)  # Use earliest date as target
 
@@ -1320,23 +1361,34 @@ def bill_detail(request, bill_id):
 
 def line_item_update(request, line_item_id):
     """Update a specific line item."""
+    # Get the bill_id first for redirects
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT provider_bill_id 
+                FROM BillLineItem 
+                WHERE id = %s
+            """, [line_item_id])
+            row = cursor.fetchone()
+            if not row:
+                messages.error(request, 'Line item not found.')
+                return HttpResponseRedirect(reverse('bill_review:dashboard'))
+            
+            bill_id = row[0]
+    except Exception as e:
+        logger.error(f"Error getting bill_id for line item {line_item_id}: {e}")
+        messages.error(request, 'Line item not found.')
+        return HttpResponseRedirect(reverse('bill_review:dashboard'))
+    
     if request.method == 'POST':
+        logger.info(f"Line item update POST data: {dict(request.POST)}")
         form = LineItemUpdateForm(request.POST)
         if form.is_valid():
             try:
                 with connection.cursor() as cursor:
-                    # Get the bill_id for redirect
-                    cursor.execute("""
-                        SELECT provider_bill_id 
-                        FROM BillLineItem 
-                        WHERE id = %s
-                    """, [line_item_id])
-                    row = cursor.fetchone()
-                    if not row:
-                        messages.error(request, 'Line item not found.')
-                        return HttpResponseRedirect(reverse('bill_review:dashboard'))
-                    
-                    bill_id = row[0]
+                    # Log the date value being saved
+                    date_value = form.cleaned_data['date_of_service']
+                    logger.info(f"Updating line item {line_item_id}: date_of_service = {date_value} (type: {type(date_value)})")
                     
                     # Update the line item
                     cursor.execute("""
@@ -1348,6 +1400,7 @@ def line_item_update(request, line_item_id):
                             allowed_amount = %s,
                             decision = %s,
                             reason_code = %s,
+                            place_of_service = %s,
                             date_of_service = %s
                         WHERE id = %s
                     """, [
@@ -1358,6 +1411,7 @@ def line_item_update(request, line_item_id):
                         form.cleaned_data['allowed_amount'],
                         form.cleaned_data['decision'],
                         form.cleaned_data['reason_code'],
+                        form.cleaned_data['place_of_service'],
                         form.cleaned_data['date_of_service'],
                         line_item_id
                     ])
@@ -1367,8 +1421,32 @@ def line_item_update(request, line_item_id):
             except Exception as e:
                 logger.error(f"Error updating line item {line_item_id}: {e}")
                 messages.error(request, 'Failed to update line item.')
+        else:
+            logger.error(f"Form validation errors: {form.errors}")
+            messages.error(request, 'Please correct the errors below.')
     
-    return HttpResponseRedirect(reverse('bill_review:dashboard'))
+    # If GET request or form errors, redirect back to bill detail instead of dashboard
+    return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
+
+def update_patient_name(request, bill_id):
+    """Update patient name with simple SQL query."""
+    if request.method == 'POST':
+        patient_name = request.POST.get('patient_name', '').strip()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE ProviderBill 
+                    SET patient_name = %s 
+                    WHERE id = %s
+                """, [patient_name, bill_id])
+            
+            messages.success(request, 'Patient name updated successfully.')
+        except Exception as e:
+            logger.error(f"Error updating patient name for bill {bill_id}: {e}")
+            messages.error(request, 'Failed to update patient name.')
+    
+    # Stay on the same page (no redirect to dashboard)
+    return HttpResponseRedirect(reverse('bill_review:bill_detail', args=[bill_id]))
 
 def reset_bill(request, bill_id):
     """Reset a bill to MAPPED status for reprocessing."""
@@ -1651,8 +1729,8 @@ def add_line_item(request, bill_id):
                         INSERT INTO BillLineItem (
                             provider_bill_id, cpt_code, modifier, units, 
                             charge_amount, allowed_amount, decision, 
-                            reason_code, date_of_service
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            reason_code, place_of_service, date_of_service
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, [
                         bill_id,
                         form.cleaned_data['cpt_code'],
@@ -1662,6 +1740,7 @@ def add_line_item(request, bill_id):
                         form.cleaned_data['allowed_amount'],
                         form.cleaned_data['decision'],
                         form.cleaned_data['reason_code'],
+                        form.cleaned_data['place_of_service'],
                         form.cleaned_data['date_of_service']
                     ])
                 

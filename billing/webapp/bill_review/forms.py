@@ -46,8 +46,16 @@ class LineItemUpdateForm(forms.Form):
     allowed_amount = forms.DecimalField(max_digits=10, decimal_places=2, required=False)
     decision = forms.ChoiceField(choices=DECISION_CHOICES)
     reason_code = forms.CharField(max_length=20, required=False)
-    date_of_service = forms.DateField(
+    place_of_service = forms.CharField(
+        max_length=10,
         required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g., 11 (Office)'
+        })
+    )
+    date_of_service = forms.DateField(
+        required=True,
         widget=forms.DateInput(attrs={
             'class': 'form-control',
             'type': 'date'
@@ -191,6 +199,14 @@ class AddLineItemForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'Optional reason code'
+        })
+    )
+    place_of_service = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g., 11 (Office)'
         })
     )
     date_of_service = forms.DateField(

@@ -368,6 +368,23 @@ document.addEventListener('DOMContentLoaded', function() {
             </h2>
             <div id="billInfo" class="accordion-collapse collapse show" data-bs-parent="#billAccordion">
                 <div class="accordion-body">
+                    <!-- Patient Name Section (separate form) -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Patient Name</label>
+                                <form method="post" action="{% url 'bill_review:update_patient_name' bill.id %}" class="d-flex gap-2 align-items-end">
+                                    {% csrf_token %}
+                                    <input type="text" name="patient_name" class="form-control" value="{{ bill.patient_name }}" placeholder="Enter patient name">
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Main Bill Update Form -->
                     <form method="post" action="{% url 'bill_review:update_bill' bill.id %}">
                         {% csrf_token %}
                         <div class="row">
@@ -379,10 +396,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <div class="mb-3">
                                     <label class="form-label">Claim ID</label>
                                     <input type="text" class="form-control" value="{{ bill.claim_id }}" readonly>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Patient Name</label>
-                                    <input type="text" class="form-control" value="{{ bill.patient_name }}" readonly>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Status</label>
@@ -1086,6 +1099,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <th>Out-Network Rate</th>
                                     <th>Decision</th>
                                     <th>Reason</th>
+                                    <th>PLOS</th>
                                     <th>Date of Service</th>
                                     <th>Actions</th>
                                 </tr>
@@ -1107,7 +1121,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         </span>
                                     </td>
                                     <td>{{ item.reason_code|default:"-" }}</td>
-                                    <td>{{ item.date_of_service }}</td>
+                                    <td>{{ item.place_of_service|default:"-" }}</td>
+                                    <td>{% if item.date_of_service %}{{ item.date_of_service }}{% else %}-{% endif %}</td>
                                     <td>
                                         <div class="btn-group">
                                             <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editLineItem{{ item.id }}">
@@ -1146,8 +1161,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                                                 <input type="number" name="units" class="form-control" value="{{ item.units }}" min="1" required>
                                                             </div>
                                                             <div class="mb-3">
+                                                                <label class="form-label">Place of Service</label>
+                                                                <input type="text" name="place_of_service" class="form-control" value="{{ item.place_of_service|default:'' }}" placeholder="e.g., 11 (Office)">
+                                                            </div>
+                                                            <div class="mb-3">
                                                                 <label class="form-label">Date of Service *</label>
-                                                                <input type="date" name="date_of_service" class="form-control" value="{{ item.date_of_service }}" required>
+                                                                <input type="date" name="date_of_service" class="form-control" value="{% if item.date_of_service %}{% if item.date_of_service|date:'Y-m-d' != 'None' %}{{ item.date_of_service|date:'Y-m-d' }}{% else %}{{ item.date_of_service }}{% endif %}{% endif %}" required>
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -1238,8 +1257,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <p class="mb-2">{{ item.units }}</p>
                                     </div>
                                     <div class="col-6">
+                                        <small class="text-muted">PLOS</small>
+                                        <p class="mb-2">{{ item.place_of_service|default:"-" }}</p>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
                                         <small class="text-muted">Date of Service</small>
-                                        <p class="mb-2">{{ item.date_of_service }}</p>
+                                        <p class="mb-2">{% if item.date_of_service %}{{ item.date_of_service }}{% else %}-{% endif %}</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Decision</small>
+                                        <p class="mb-2">
+                                            <span class="badge {% if item.decision == 'approved' %}bg-success{% elif item.decision == 'denied' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                                {{ item.decision }}
+                                            </span>
+                                        </p>
                                     </div>
                                 </div>
                                 <div class="row">
@@ -1410,6 +1443,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="mb-3">
                                 <label class="form-label">Units *</label>
                                 <input type="number" name="units" class="form-control" value="1" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Place of Service</label>
+                                <input type="text" name="place_of_service" class="form-control" 
+                                       placeholder="e.g., 11 (Office)">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Date of Service *</label>

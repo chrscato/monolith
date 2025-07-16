@@ -288,101 +288,139 @@ def update_provider_bill(bill_id: str, extracted: dict) -> bool:
 #  Main S3 loop
 # ─────────────────────────────────────────────────────────────────────────────
 def process_s3(limit: int | None = None):
-    print(f"Vision extraction from s3://{S3_BUCKET}/{INPUT_PREFIX}")
-    keys = [k for k in list_objects(INPUT_PREFIX) if k.lower().endswith(".pdf")]
-    if limit:
-        keys = keys[:limit]
-
-    for key in keys:
-        tmp_pdf = tempfile.mktemp(suffix=".pdf")
-        try:
-            download(key, tmp_pdf)
-            bill_id = Path(key).stem
-            print(f"→ {bill_id}")
-
-            data = normalise_charges(extract_via_llm(tmp_pdf))
-
-            # Additional validation before database update
-            service_lines = data.get("service_lines", [])
-            if not service_lines:
-                print(f" ❌ ERROR: No service lines found after extraction for {bill_id}")
-                # Log this as an error
-                err = tempfile.mktemp(suffix=".log")
-                with open(err, "w") as f:
-                    f.write(f"{datetime.now()}: {key} – No service lines extracted\n")
-                upload(err, LOG_PREFIX)
-                continue
+    print(f"Vision extraction for bills with status 'RECEIVED'")
+    
+    # Query database for bills that need processing
+    db_path = r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db"
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    cur = conn.cursor()
+    
+    try:
+        # Get all bills with status 'RECEIVED'
+        cur.execute("SELECT id FROM ProviderBill WHERE status = 'RECEIVED' ORDER BY created_at ASC")
+        bill_ids = [row[0] for row in cur.fetchall()]
+        
+        if limit:
+            bill_ids = bill_ids[:limit]
+        
+        print(f"Found {len(bill_ids)} bills with status 'RECEIVED' to process")
+        
+        if not bill_ids:
+            print("No bills with status 'RECEIVED' found. Nothing to process.")
+            return
+        
+        for bill_id in bill_ids:
+            # Check if PDF exists in S3 input folder
+            pdf_key = f"{INPUT_PREFIX}{bill_id}.pdf"
             
-            # Validate that service lines have required fields
-            valid_service_lines = []
-            for i, line in enumerate(service_lines):
-                if not line.get("cpt_code") or not line.get("charge_amount"):
-                    print(f" ⚠ WARNING: Service line {i+1} missing required fields (CPT: {line.get('cpt_code')}, Charge: {line.get('charge_amount')})")
-                    continue
-                valid_service_lines.append(line)
-            
-            if not valid_service_lines:
-                print(f" ❌ ERROR: No valid service lines found for {bill_id}")
-                err = tempfile.mktemp(suffix=".log")
-                with open(err, "w") as f:
-                    f.write(f"{datetime.now()}: {key} – No valid service lines (missing CPT or charge)\n")
-                upload(err, LOG_PREFIX)
-                continue
-            
-            # Update data with validated service lines
-            data["service_lines"] = valid_service_lines
-            print(f"   ✓ Validated {len(valid_service_lines)} service line(s)")
-
-            if update_provider_bill(bill_id, data):
-                # push JSON
-                tmp_json = tempfile.mktemp(suffix=".json")
-                with open(tmp_json, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-                upload(tmp_json, f"{OUTPUT_PREFIX}{bill_id}.json")
-                os.unlink(tmp_json)
-
-                # Create local backup before archiving
-                backup_dir = Path("backup_pdfs")
-                backup_dir.mkdir(exist_ok=True)
-                backup_path = backup_dir / f"{bill_id}.pdf"
-                
-                try:
-                    # Copy the local PDF to backup location
-                    import shutil
-                    shutil.copy2(tmp_pdf, backup_path)
-                    print(f" 📁 Local backup: {backup_path}")
-                except Exception as backup_exc:
-                    print(f" ⚠ Local backup failed: {backup_exc}")
-
-                # archive original PDF
-                try:
-                    move(key, f"{ARCHIVE_PREFIX}{Path(key).name}")
-                    print(" ✓ success")
-                    
-                    # If S3 archive succeeded, we can optionally remove local backup
-                    # Uncomment the next line if you want to auto-cleanup successful backups
-                    # backup_path.unlink(missing_ok=True)
-                    
-                except Exception as archive_exc:
-                    print(f" ⚠ Archive failed: {archive_exc}")
-                    print(f" 💾 Local backup preserved at: {backup_path}")
-                    # Log the archiving failure
+            # Check if PDF exists in S3
+            try:
+                s3_objects = list_objects(INPUT_PREFIX)
+                if pdf_key not in s3_objects:
+                    print(f" ❌ PDF not found in S3 for bill {bill_id}: {pdf_key}")
+                    # Log this as an error
                     err = tempfile.mktemp(suffix=".log")
                     with open(err, "w") as f:
-                        f.write(f"{datetime.now()}: {key} – Archive failed: {archive_exc}\n")
+                        f.write(f"{datetime.now()}: {bill_id} – PDF not found in S3: {pdf_key}\n")
                     upload(err, LOG_PREFIX)
-                    # Note: Data is still processed and in database, but PDF remains in input
-            else:
-                print(" ⚠ DB update failed")
-        except Exception as exc:
-            print(f" ❌ {exc}")
-            err = tempfile.mktemp(suffix=".log")
-            with open(err, "w") as f:
-                f.write(f"{datetime.now()}: {key} – {exc}\n")
-            upload(err, LOG_PREFIX)
-        finally:
-            if os.path.exists(tmp_pdf):
-                os.unlink(tmp_pdf)
+                    continue
+            except Exception as s3_exc:
+                print(f" ❌ Error checking S3 for bill {bill_id}: {s3_exc}")
+                continue
+            
+            tmp_pdf = tempfile.mktemp(suffix=".pdf")
+            try:
+                download(pdf_key, tmp_pdf)
+                print(f"→ {bill_id}")
+
+                data = normalise_charges(extract_via_llm(tmp_pdf))
+
+                # Additional validation before database update
+                service_lines = data.get("service_lines", [])
+                if not service_lines:
+                    print(f" ❌ ERROR: No service lines found after extraction for {bill_id}")
+                    # Log this as an error
+                    err = tempfile.mktemp(suffix=".log")
+                    with open(err, "w") as f:
+                        f.write(f"{datetime.now()}: {bill_id} – No service lines extracted\n")
+                    upload(err, LOG_PREFIX)
+                    continue
+                
+                # Validate that service lines have required fields
+                valid_service_lines = []
+                for i, line in enumerate(service_lines):
+                    if not line.get("cpt_code") or not line.get("charge_amount"):
+                        print(f" ⚠ WARNING: Service line {i+1} missing required fields (CPT: {line.get('cpt_code')}, Charge: {line.get('charge_amount')})")
+                        continue
+                    valid_service_lines.append(line)
+                
+                if not valid_service_lines:
+                    print(f" ❌ ERROR: No valid service lines found for {bill_id}")
+                    err = tempfile.mktemp(suffix=".log")
+                    with open(err, "w") as f:
+                        f.write(f"{datetime.now()}: {bill_id} – No valid service lines (missing CPT or charge)\n")
+                    upload(err, LOG_PREFIX)
+                    continue
+                
+                # Update data with validated service lines
+                data["service_lines"] = valid_service_lines
+                print(f"   ✓ Validated {len(valid_service_lines)} service line(s)")
+
+                if update_provider_bill(bill_id, data):
+                    # push JSON
+                    tmp_json = tempfile.mktemp(suffix=".json")
+                    with open(tmp_json, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2)
+                    upload(tmp_json, f"{OUTPUT_PREFIX}{bill_id}.json")
+                    os.unlink(tmp_json)
+
+                    # Create local backup before archiving
+                    backup_dir = Path("backup_pdfs")
+                    backup_dir.mkdir(exist_ok=True)
+                    backup_path = backup_dir / f"{bill_id}.pdf"
+                    
+                    try:
+                        # Copy the local PDF to backup location
+                        import shutil
+                        shutil.copy2(tmp_pdf, backup_path)
+                        print(f" 📁 Local backup: {backup_path}")
+                    except Exception as backup_exc:
+                        print(f" ⚠ Local backup failed: {backup_exc}")
+
+                    # archive original PDF
+                    try:
+                        move(pdf_key, f"{ARCHIVE_PREFIX}{bill_id}.pdf")
+                        print(" ✓ success")
+                        
+                        # If S3 archive succeeded, we can optionally remove local backup
+                        # Uncomment the next line if you want to auto-cleanup successful backups
+                        # backup_path.unlink(missing_ok=True)
+                        
+                    except Exception as archive_exc:
+                        print(f" ⚠ Archive failed: {archive_exc}")
+                        print(f" 💾 Local backup preserved at: {backup_path}")
+                        # Log the archiving failure
+                        err = tempfile.mktemp(suffix=".log")
+                        with open(err, "w") as f:
+                            f.write(f"{datetime.now()}: {bill_id} – Archive failed: {archive_exc}\n")
+                        upload(err, LOG_PREFIX)
+                        # Note: Data is still processed and in database, but PDF remains in input
+                else:
+                    print(" ⚠ DB update failed")
+            except Exception as exc:
+                print(f" ❌ {exc}")
+                err = tempfile.mktemp(suffix=".log")
+                with open(err, "w") as f:
+                    f.write(f"{datetime.now()}: {bill_id} – {exc}\n")
+                upload(err, LOG_PREFIX)
+            finally:
+                if os.path.exists(tmp_pdf):
+                    os.unlink(tmp_pdf)
+    
+    except Exception as db_exc:
+        print(f" ❌ Database error: {db_exc}")
+    finally:
+        conn.close()
 
     print("Done – vision extraction complete.")
 

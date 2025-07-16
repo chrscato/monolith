@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('bill/<str:bill_id>/', views.bill_detail, name='bill_detail'),
     path('bill/<str:bill_id>/update/', views.update_bill, name='update_bill'),
+    path('bill/<str:bill_id>/update-patient-name/', views.update_patient_name, name='update_patient_name'),
     path('bill/<str:bill_id>/reset/', views.reset_bill, name='reset_bill'),
     path('bill/<str:bill_id>/pdf/', views.view_bill_pdf, name='view_bill_pdf'),
     path('bill/<str:bill_id>/map/<str:order_id>/', views.map_bill_to_order, name='map_bill_to_order'),
