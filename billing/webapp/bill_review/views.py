@@ -722,12 +722,17 @@ def normalize_date(date_str):
         # Convert to string if it's not already
         date_str = str(date_str).strip()
         
+        # Debug logging
+        logger.info(f"normalize_date input: '{date_str}' (type: {type(date_str)})")
+        
         # Handle date range format (e.g., "04/04/2025-04/04/2025")
         if '-' in date_str and len(date_str.split('-')) > 1:
             date_str = date_str.split('-')[0].strip()
+            logger.info(f"Extracted first part of date range: '{date_str}'")
         
         # If it's already in YYYY-MM-DD format, return as is
         if len(date_str) == 10 and date_str.count('-') == 2:
+            logger.info(f"Already in YYYY-MM-DD format: '{date_str}'")
             return date_str
         
         # Handle year-only dates (e.g., "2023")
@@ -739,11 +744,24 @@ def normalize_date(date_str):
                 return date_str
         
         # Try different date formats
-        for fmt in ['%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d', '%m-%d-%Y', '%m-%d-%y']:
+        formats_to_try = [
+            '%m/%d/%Y',    # 07/01/2025
+            '%m/%d/%y',    # 07/01/25
+            '%Y-%m-%d',    # 2025-07-01
+            '%m-%d-%Y',    # 07-01-2025
+            '%m-%d-%y',    # 07-01-25
+            '%d/%m/%Y',    # 01/07/2025 (European format)
+            '%d/%m/%y',    # 01/07/25 (European format)
+        ]
+        
+        for fmt in formats_to_try:
             try:
                 parsed_date = datetime.strptime(date_str, fmt)
-                return parsed_date.strftime('%Y-%m-%d')
+                result = parsed_date.strftime('%Y-%m-%d')
+                logger.info(f"Successfully parsed '{date_str}' with format '{fmt}' -> '{result}'")
+                return result
             except ValueError:
+                logger.debug(f"Failed to parse '{date_str}' with format '{fmt}'")
                 continue
         
         # If we can't parse it, return the original string for display
@@ -987,18 +1005,49 @@ def bill_detail(request, bill_id):
             bill_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
             
             # Debug: Log raw date values from database
+            logger.info(f"Available columns in BillLineItem: {columns}")
             for item in bill_items:
                 logger.info(f"Raw line item {item.get('id')}: date_of_service = '{item.get('date_of_service')}' (type: {type(item.get('date_of_service'))})")
+                logger.info(f"Raw line item {item.get('id')}: All fields = {list(item.keys())}")
+                # Check for any date-related fields
+                for key, value in item.items():
+                    if 'date' in key.lower():
+                        logger.info(f"Raw line item {item.get('id')}: {key} = '{value}' (type: {type(value)})")
             
             # Normalize dates for each line item
             for item in bill_items:
-                if 'date_of_service' in item:
-                    original_date = item['date_of_service']
-                    normalized_date = normalize_date(item['date_of_service'])
+                # Check for date_of_service field
+                date_field = None
+                date_value = None
+                
+                # Try different possible date field names
+                for field_name in ['date_of_service', 'dos', 'service_date', 'date']:
+                    if field_name in item and item[field_name] is not None:
+                        date_field = field_name
+                        date_value = item[field_name]
+                        logger.info(f"Line item {item.get('id')}: Found date in field '{field_name}' = '{date_value}'")
+                        break
+                
+                if date_field and date_value is not None:
+                    original_date = date_value
+                    normalized_date = normalize_date(date_value)
                     logger.info(f"Line item {item.get('id')}: Original date='{original_date}' (type: {type(original_date)}), Normalized date='{normalized_date}' (type: {type(normalized_date)})")
-                    item['date_of_service'] = normalized_date
+                    
+                    # Convert normalized date string back to date object for template formatting
+                    if normalized_date and len(normalized_date) == 10 and normalized_date.count('-') == 2:
+                        try:
+                            date_obj = datetime.strptime(normalized_date, '%Y-%m-%d').date()
+                            item['date_of_service'] = date_obj
+                            logger.info(f"Line item {item.get('id')}: Converted to date object: {date_obj}")
+                        except ValueError:
+                            logger.warning(f"Line item {item.get('id')}: Could not convert '{normalized_date}' to date object, keeping as string")
+                            item['date_of_service'] = normalized_date
+                    else:
+                        # Keep as string if not in YYYY-MM-DD format
+                        item['date_of_service'] = normalized_date
                 else:
-                    logger.info(f"Line item {item.get('id')}: No date_of_service field found")
+                    logger.info(f"Line item {item.get('id')}: No date field found or date is None/empty")
+                    item['date_of_service'] = None
             
             # Get order details if claim_id exists
             order = {}
@@ -1204,13 +1253,18 @@ def bill_detail(request, bill_id):
                     if item.get('date_of_service'):
                         normalized = normalize_date(item['date_of_service'])
                         if normalized:
-                            try:
-                                # Convert normalized string back to date object
-                                parsed_date = datetime.strptime(normalized, '%Y-%m-%d').date()
-                                dates.append(parsed_date)
-                            except ValueError:
-                                logger.warning(f"Could not parse normalized date '{normalized}' back to date object")
-                                continue
+                            # Only try to parse if it's a full date (YYYY-MM-DD format)
+                            if len(normalized) == 10 and normalized.count('-') == 2:
+                                try:
+                                    # Convert normalized string back to date object
+                                    parsed_date = datetime.strptime(normalized, '%Y-%m-%d').date()
+                                    dates.append(parsed_date)
+                                except ValueError:
+                                    logger.warning(f"Could not parse normalized date '{normalized}' back to date object")
+                                    continue
+                            else:
+                                # For year-only dates or other formats, skip them for target date calculation
+                                logger.info(f"Skipping non-full date '{normalized}' for target date calculation")
                 if dates:
                     target_date = min(dates)  # Use earliest date as target
 
