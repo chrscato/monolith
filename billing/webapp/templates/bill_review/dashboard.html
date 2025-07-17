@@ -23,7 +23,7 @@
     font-size: 1.1rem;
     font-weight: 500;
     margin-bottom: 1rem;
-    color: #495057;
+    color: var(--chart-title-color);
 }
 </style>
 {% endblock %}
@@ -185,6 +185,9 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const gridColor = rootStyles.getPropertyValue('--grid-color').trim();
+    const tooltipBg = rootStyles.getPropertyValue('--tooltip-bg').trim();
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
@@ -201,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 display: false
             },
             tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                backgroundColor: tooltipBg,
                 padding: 12,
                 titleFont: {
                     size: 14,
@@ -224,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 grid: {
                     display: true,
-                    color: 'rgba(0, 0, 0, 0.1)'
+                    color: gridColor
                 }
             },
             y: {
