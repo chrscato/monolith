@@ -1,0 +1,26 @@
+.dark-mode body {
+    background-color: #121212;
+    color: #f8f9fa;
+}
+.dark-mode .navbar {
+    background-color: #1f1f1f !important;
+}
+.dark-mode .card,
+.dark-mode .modal-content,
+.dark-mode .table,
+.dark-mode .dropdown-menu {
+    background-color: #1e1e1e;
+    color: #f8f9fa;
+}
+.dark-mode .table thead {
+    color: #f8f9fa;
+}
+.dark-mode .bg-light {
+    background-color: #343a40 !important;
+}
+.dark-mode .text-dark {
+    color: #f8f9fa !important;
+}
+.dark-mode a {
+    color: #8ab4f8;
+}
