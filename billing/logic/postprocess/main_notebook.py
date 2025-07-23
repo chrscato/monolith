@@ -85,28 +85,29 @@ else:
 import re
 from datetime import datetime
 
+from datetime import datetime
+
 def simple_standardize_date_format(date_str: str) -> str:
     """
-    Standardize date strings to YYYY-MM-DD format.
-    
+    Standardize date strings to MM/DD/YYYY format.
+
     Args:
         date_str: Raw date string (like "11/25/24" or "2024-11-25")
-        
+
     Returns:
-        Standardized date string in YYYY-MM-DD format
+        Standardized date string in MM/DD/YYYY format
     """
     if not date_str:
         return ""
     
     date_str = str(date_str).strip()
-    
+
     # Handle date ranges - take the first date
     if ' - ' in date_str:
         date_str = date_str.split(' - ')[0].strip()
-    
-    # Try the specific formats we're seeing
+
     formats_to_try = [
-        '%Y-%m-%d',      # 2024-11-25 (already correct)
+        '%Y-%m-%d',      # 2024-11-25
         '%m/%d/%y',      # 11/25/24
         '%m/%d/%Y',      # 11/25/2024
         '%Y/%m/%d',      # 2024/11/25
@@ -118,22 +119,22 @@ def simple_standardize_date_format(date_str: str) -> str:
         try:
             parsed_date = datetime.strptime(date_str, fmt).date()
             
-            # Handle 2-digit years - assume 20xx for years 00-30, 19xx for 31-99
+            # Normalize 2-digit years
             if parsed_date.year < 100:
                 if parsed_date.year <= 30:
                     parsed_date = parsed_date.replace(year=parsed_date.year + 2000)
                 else:
                     parsed_date = parsed_date.replace(year=parsed_date.year + 1900)
-            
-            # Validate reasonable year range
+
             if 1900 <= parsed_date.year <= 2030:
-                return parsed_date.strftime('%Y-%m-%d')
-                
+                return parsed_date.strftime('%m/%d/%Y')
+        
         except ValueError:
             continue
-    
+
     print(f"⚠️  Could not parse date: '{date_str}'")
-    return date_str  # Return original if can't parse
+    return date_str
+
 
 def clean_none_value(value):
     """
@@ -380,6 +381,14 @@ print(f"\n🎯 Ready for Cell 4 verification!")
 # %%
 # Cell 4: Data Verification & Excel Preparation (Enhanced for Spot Checking)
 # =============================================================================
+import uuid
+from datetime import datetime
+
+def format_dos(dos_str):
+    try:
+        return datetime.strptime(dos_str, "%Y-%m-%d").strftime("%y%m%d")
+    except Exception:
+        return "000000"
 
 print("STEP 4: DATA VERIFICATION & EXCEL PREPARATION")
 print("=" * 60)
@@ -454,7 +463,6 @@ if 'cleaned_bills' in locals() and cleaned_bills:
     # Prepare bills for Excel generation (filter out problematic ones if needed)
     excel_ready_bills = []
     for bill in cleaned_bills:
-        # Minimum requirements for Excel generation
         if (bill.get('PatientName') and 
             bill.get('FileMaker_Record_Number') and 
             bill.get('provider_billing_name') and
@@ -533,16 +541,21 @@ if 'cleaned_bills' in locals() and cleaned_bills:
             print(f"   Earliest DOS: {earliest_dos}")
             print(f"   Duplicate Key: {bill.get('FileMaker_Record_Number', '')}|{','.join(sorted(cpt_codes))}")
             
+            # ✅ EOBR Number Generation
+            formatted_dos = format_dos(earliest_dos)
+            uuid_suffix = uuid.uuid4().hex[:7].upper()
+            eobr_number = f"EOBR-{formatted_dos}-{uuid_suffix}"
+            bill['EOBR_Number'] = eobr_number
+            
             # Show what Excel row will look like
             print(f"\n📝 PREDICTED EXCEL ROW:")
             print(f"   Vendor: {bill.get('provider_billing_name', '')}")
-            print(f"   EOBR Number: {bill.get('FileMaker_Record_Number', '')}-X (X will be calculated)")
+            print(f"   EOBR Number: {eobr_number}")
             print(f"   Bill Date: {earliest_dos}")
             print(f"   Amount: ${bill_total:.2f}")
             print(f"   Description: {earliest_dos}, {', '.join(sorted(cpt_codes))}, {bill.get('PatientName', '')}, {bill.get('FileMaker_Record_Number', '')}")
             print(f"   Memo: {earliest_dos}, {bill.get('PatientName', '')}")
             
-            # Pause between bills for readability
             if i < len(excel_ready_bills) - 1:
                 print(f"\n{'─'*60}")
                 print(f"(Bill {i+1} complete - {len(excel_ready_bills) - i - 1} more bills below)")
@@ -565,6 +578,7 @@ else:
     excel_ready_bills = []
 
 print(f"\n✅ Verification complete - {len(excel_ready_bills) if 'excel_ready_bills' in locals() else 0} bills ready for Excel generation")
+
 
 # %%
 # Fix Order ID to Use UUID Field (Option B)
@@ -981,13 +995,12 @@ else:
 # -- Cell 6: Audit Log and Database updates
 
 # %%
-# Cell 6: Audit Log Generation & Database Updates (COMPLETE FIXED VERSION)
+# Cell 6: Audit Log Generation (AUDIT ONLY - DB Updates Moved to Cell 6B)
 # =============================================================================
 
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
-from utils.db_utils import get_db_connection
 
 def create_comprehensive_audit_log(excel_ready_bills, batch_excel_path=None, summary=None):
     """
@@ -1208,7 +1221,7 @@ def save_audit_log_excel(audit_dfs, output_dir, batch_excel_path=None):
                 len(audit_dfs['line_items']),
                 f"${audit_dfs['line_items']['allowed_amount'].sum():.2f}",
                 str(batch_excel_path) if batch_excel_path else 'Not Generated',
-                'PROCESSED'
+                'AUDIT_COMPLETE'
             ]
         }
         summary_df = pd.DataFrame(summary_data)
@@ -1217,163 +1230,8 @@ def save_audit_log_excel(audit_dfs, output_dir, batch_excel_path=None):
     print(f"   ✅ Audit log saved with {len(audit_dfs)} sheets")
     return audit_path
 
-def update_database_bill_status(excel_ready_bills, mark_as_paid=True):
-    """
-    Update ProviderBill table to mark bills as paid.
-    
-    Args:
-        excel_ready_bills: List of processed bills
-        mark_as_paid: Whether to actually mark bills as paid
-        
-    Returns:
-        Update report with success/failure details
-    """
-    print(f"🔄 DATABASE UPDATE")
-    print(f"   Mark as paid: {mark_as_paid}")
-    
-    if not mark_as_paid:
-        print(f"   ⚠️  Database updates disabled - bills not marked as paid")
-        print(f"   📋 To enable: set mark_as_paid=True")
-        return {
-            'updated': False,
-            'bill_count': len(excel_ready_bills),
-            'message': 'Database updates disabled'
-        }
-    
-    # Import database utilities - FIXED IMPORT PATH
-    try:
-        from billing.logic.postprocess.utils.db_utils import get_db_connection
-        # Alternative try for different import structure
-    except ImportError:
-        try:
-            # Try relative import if absolute doesn't work
-            from utils.db_utils import get_db_connection
-        except ImportError:
-            try:
-                # Try direct import if in same directory
-                from db_utils import get_db_connection
-            except ImportError:
-                print("   ❌ Could not import database utilities")
-                print("   💡 Tried:")
-                print("      - billing.logic.postprocess.utils.db_utils")
-                print("      - utils.db_utils") 
-                print("      - db_utils")
-                return {
-                    'updated': False,
-                    'bill_count': 0,
-                    'message': 'Database utilities not available - import failed'
-                }
-    
-    # Get bill IDs to update
-    bill_ids = [bill.get('id') for bill in excel_ready_bills]
-    
-    print(f"   🚀 Updating {len(bill_ids)} bills in ProviderBill table...")
-    
-    # Check if get_db_connection is implemented
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            print("   ❌ get_db_connection() returned None")
-            print("   💡 The function needs to be implemented in db_utils.py")
-            return {
-                'updated': False,
-                'bill_count': 0,
-                'message': 'Database connection not implemented'
-            }
-    except Exception as e:
-        print(f"   ❌ Database connection failed: {str(e)}")
-        print("   💡 Check if get_db_connection() is implemented in db_utils.py")
-        return {
-            'updated': False,
-            'bill_count': 0,
-            'message': f'Database connection error: {str(e)}'
-        }
-    
-    cursor = conn.cursor()
-    
-    updated_count = 0
-    failed_updates = []
-    
-    try:
-        for bill_id in bill_ids:
-            try:
-                # Update the ProviderBill table
-                cursor.execute("""
-                    UPDATE ProviderBill 
-                    SET bill_paid = 'Y',
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (bill_id,))
-                
-                # Check if the update actually affected a row
-                if cursor.rowcount > 0:
-                    updated_count += 1
-                    print(f"      ✅ {bill_id}: bill_paid = 'Y'")
-                else:
-                    failed_updates.append({
-                        'bill_id': bill_id,
-                        'error': 'Bill ID not found in database'
-                    })
-                    print(f"      ❌ {bill_id}: Bill not found")
-                
-            except Exception as e:
-                failed_updates.append({
-                    'bill_id': bill_id,
-                    'error': str(e)
-                })
-                print(f"      ❌ {bill_id}: {str(e)}")
-        
-        # Commit all changes
-        conn.commit()
-        print(f"   ✅ Database commit successful")
-        
-        # Verify updates
-        print(f"   🔍 Verifying updates...")
-        verification_sql = f"""
-            SELECT id, bill_paid, updated_at 
-            FROM ProviderBill 
-            WHERE id IN ({','.join(['?' for _ in bill_ids])})
-        """
-        cursor.execute(verification_sql, bill_ids)
-        verification_results = cursor.fetchall()
-        
-        verified_paid = 0
-        for row in verification_results:
-            if row[1] == 'Y':  # bill_paid column
-                verified_paid += 1
-        
-        print(f"   ✅ Verification: {verified_paid}/{len(bill_ids)} bills marked as paid")
-        
-    except Exception as e:
-        conn.rollback()
-        print(f"   ❌ Database error: {str(e)}")
-        print(f"   🔄 All changes rolled back")
-        return {
-            'updated': False,
-            'bill_count': 0,
-            'updated_count': 0,
-            'failed_count': len(bill_ids),
-            'message': f'Database update failed: {str(e)}',
-            'failed_updates': [{'bill_id': bid, 'error': str(e)} for bid in bill_ids]
-        }
-    
-    finally:
-        conn.close()
-    
-    # Return comprehensive update report
-    return {
-        'updated': True,
-        'bill_count': len(bill_ids),
-        'updated_count': updated_count,
-        'failed_count': len(failed_updates),
-        'bill_ids_updated': [bid for bid in bill_ids if bid not in [f['bill_id'] for f in failed_updates]],
-        'failed_updates': failed_updates,
-        'message': f'Successfully updated {updated_count}/{len(bill_ids)} bills'
-    }
-    
-
 # Main Cell 6 Execution
-print("STEP 6: AUDIT LOG GENERATION & DATABASE UPDATES")
+print("STEP 6: AUDIT LOG GENERATION (AUDIT ONLY)")
 print("=" * 60)
 
 if 'excel_ready_bills' in locals() and excel_ready_bills:
@@ -1405,34 +1263,10 @@ if 'excel_ready_bills' in locals() and excel_ready_bills:
     print(f"   Line items tracked: {len(audit_dfs['line_items'])}")
     print(f"   Providers tracked: {len(audit_dfs['providers'])}")
     
-    # Database update (now with actual implementation)
-    update_report = update_database_bill_status(
-        excel_ready_bills, 
-        mark_as_paid=True  # CHANGED TO TRUE - WILL ACTUALLY UPDATE DATABASE
-    )
-    
-    print(f"\n🔄 DATABASE UPDATE RESULTS:")
-    print(f"   Bills processed: {update_report['bill_count']}")
-    
-    if update_report['updated']:
-        print(f"   ✅ Successfully updated: {update_report['updated_count']}")
-        print(f"   ❌ Failed updates: {update_report['failed_count']}")
-        
-        if update_report['failed_count'] > 0:
-            print(f"   Failed bills:")
-            for failure in update_report['failed_updates'][:3]:  # Show first 3
-                print(f"      {failure['bill_id']}: {failure['error']}")
-    else:
-        print(f"   Status: {update_report['message']}")
-    
     print(f"\n✅ CELL 6 COMPLETE!")
     print(f"   📄 Main Excel: {batch_path if batch_path else 'Not available'}")
     print(f"   📋 Audit Log: {audit_excel_path}")
-    
-    if update_report['updated']:
-        print(f"   ✅ Database: {update_report['updated_count']} bills marked as paid")
-    else:
-        print(f"   🔄 Database: Ready for updates (set mark_as_paid=True)")
+    print(f"   🔄 Database updates moved to Cell 6B")
 
 else:
     print("❌ No excel_ready_bills available from previous steps")
@@ -1444,10 +1278,7 @@ if 'audit_excel_path' in locals():
 else:
     print(f"   1. Audit log not generated")
 print(f"   2. Verify Excel batch file")  
-if 'update_report' in locals() and not update_report['updated']:
-    print(f"   3. Set mark_as_paid=True to update database (when ready)")
-else:
-    print(f"   3. Database updates complete")
+print(f"   3. Run Cell 6B to update database (when ready)")
 
 # %% [markdown]
 # -- Cell 4: validate for Excel Gen
@@ -1770,6 +1601,515 @@ else:
         print(f"\n🔍 Found these similar variables: {found_alternatives}")
         print("💡 You can run: analyze_data_structure(your_variable_name)")
 
+# %%
+# Import Path Diagnostic - Run this first to understand your project structure
+# =============================================================================
+
+import os
+import sys
+from pathlib import Path
+
+print("🔍 PROJECT STRUCTURE DIAGNOSTIC")
+print("=" * 60)
+
+# 1. Show current working directory
+current_dir = Path.cwd()
+print(f"📁 Current working directory: {current_dir}")
+
+# 2. Show Python path
+print(f"\n🐍 Python path (sys.path):")
+for i, path in enumerate(sys.path):
+    print(f"   {i+1:2d}. {path}")
+
+# 3. Look for project structure
+print(f"\n📂 PROJECT STRUCTURE SCAN:")
+print("Looking for billing-related directories and files...")
+
+def scan_directory(path, max_depth=3, current_depth=0):
+    """Recursively scan directory for relevant files"""
+    items = []
+    if current_depth >= max_depth:
+        return items
+    
+    try:
+        for item in sorted(path.iterdir()):
+            if item.is_dir():
+                # Look for billing, utils, or similar directories
+                if any(keyword in item.name.lower() for keyword in ['billing', 'utils', 'logic', 'postprocess']):
+                    items.append(('DIR', item, current_depth))
+                    # Recursively scan important directories
+                    items.extend(scan_directory(item, max_depth, current_depth + 1))
+            elif item.suffix == '.py':
+                # Look for Python files with relevant names
+                if any(keyword in item.name.lower() for keyword in ['db_utils', 'database', 'db', 'utils']):
+                    items.append(('FILE', item, current_depth))
+    except PermissionError:
+        pass
+    
+    return items
+
+# Scan current directory and parents
+scan_paths = [
+    current_dir,
+    current_dir.parent,
+    current_dir.parent.parent
+]
+
+relevant_items = []
+for scan_path in scan_paths:
+    if scan_path.exists():
+        print(f"\n📁 Scanning: {scan_path}")
+        items = scan_directory(scan_path, max_depth=4)
+        relevant_items.extend(items)
+
+# Show results
+if relevant_items:
+    print(f"\n🎯 RELEVANT FILES AND DIRECTORIES FOUND:")
+    for item_type, path, depth in relevant_items:
+        indent = "  " * depth
+        icon = "📁" if item_type == "DIR" else "📄"
+        print(f"   {indent}{icon} {path.relative_to(current_dir) if path.is_relative_to(current_dir) else path}")
+else:
+    print(f"\n❌ No billing/utils directories found")
+
+# 4. Check for specific files we need
+print(f"\n🔍 SEARCHING FOR SPECIFIC FILES:")
+search_patterns = [
+    "**/db_utils.py",
+    "**/database*.py", 
+    "**/utils.py",
+    "billing/**/*.py",
+    "utils/**/*.py"
+]
+
+found_files = []
+for pattern in search_patterns:
+    matches = list(current_dir.glob(pattern))
+    if matches:
+        print(f"   Pattern '{pattern}':")
+        for match in matches[:10]:  # Limit to first 10 matches
+            print(f"      📄 {match}")
+            found_files.append(match)
+        if len(matches) > 10:
+            print(f"      ... and {len(matches) - 10} more files")
+
+# 5. Check what's in the immediate directory
+print(f"\n📂 CURRENT DIRECTORY CONTENTS:")
+try:
+    items = list(current_dir.iterdir())
+    dirs = [item for item in items if item.is_dir()]
+    files = [item for item in items if item.is_file() and item.suffix == '.py']
+    
+    if dirs:
+        print(f"   📁 Directories:")
+        for d in sorted(dirs)[:15]:  # Show first 15
+            print(f"      {d.name}")
+        if len(dirs) > 15:
+            print(f"      ... and {len(dirs) - 15} more directories")
+    
+    if files:
+        print(f"   📄 Python files:")
+        for f in sorted(files)[:15]:  # Show first 15
+            print(f"      {f.name}")
+        if len(files) > 15:
+            print(f"      ... and {len(files) - 15} more files")
+
+except Exception as e:
+    print(f"   ❌ Error scanning directory: {e}")
+
+# 6. Try to determine project root
+print(f"\n🎯 PROJECT ROOT DETECTION:")
+possible_roots = []
+
+# Look for common project indicators
+root_indicators = [
+    '.git',
+    'requirements.txt',
+    'setup.py',
+    'pyproject.toml',
+    'manage.py',  # Django
+    'app.py',     # Flask
+    'main.py'
+]
+
+current_check = current_dir
+for _ in range(5):  # Check up to 5 levels up
+    for indicator in root_indicators:
+        if (current_check / indicator).exists():
+            possible_roots.append((current_check, indicator))
+            break
+    current_check = current_check.parent
+    if current_check == current_check.parent:  # Reached filesystem root
+        break
+
+if possible_roots:
+    print(f"   Possible project roots:")
+    for root, indicator in possible_roots:
+        print(f"      📁 {root} (found {indicator})")
+else:
+    print(f"   ❌ No clear project root indicators found")
+
+# 7. RECOMMENDATIONS
+print(f"\n💡 IMPORT PATH RECOMMENDATIONS:")
+
+# Look for the most likely location of db_utils.py
+db_utils_candidates = [f for f in found_files if 'db_utils' in f.name]
+
+if db_utils_candidates:
+    print(f"   Found db_utils.py files:")
+    for candidate in db_utils_candidates:
+        rel_path = candidate.relative_to(current_dir) if candidate.is_relative_to(current_dir) else candidate
+        
+        # Generate possible import statements
+        parts = rel_path.with_suffix('').parts
+        import_path = '.'.join(parts)
+        
+        print(f"      📄 {rel_path}")
+        print(f"         Try: from {import_path} import get_db_connection")
+        
+        # Check if file contains get_db_connection
+        try:
+            with open(candidate, 'r') as f:
+                content = f.read()
+            if 'def get_db_connection' in content:
+                print(f"         ✅ Contains get_db_connection function")
+            else:
+                print(f"         ❌ No get_db_connection function found")
+        except:
+            print(f"         ⚠️  Could not read file")
+else:
+    print(f"   ❌ No db_utils.py files found")
+    print(f"   💡 You may need to:")
+    print(f"      1. Create db_utils.py in utils/ directory")
+    print(f"      2. Implement get_db_connection() function")
+    print(f"      3. Or use a different database connection method")
+
+print(f"\n" + "=" * 60)
+print(f"🎯 NEXT STEPS:")
+print(f"1. Run this diagnostic cell first")
+print(f"2. Copy the working import statement from above")
+print(f"3. Update Cell 6B with the correct import path")
+print(f"4. If no db_utils.py exists, we'll create one")
+
+# %% [markdown]
+# -- Database Updates to Mark Bills Paid
+
+# %%
+# Cell 6B: Database Updates (SEPARATE FROM AUDIT LOG)
+# =============================================================================
+
+from datetime import datetime
+import sys
+from pathlib import Path
+
+# Cell 6B: Database Updates (DIRECT SQLITE CONNECTION)
+# =============================================================================
+
+from datetime import datetime
+import sqlite3
+from pathlib import Path
+import pytz  # For timezone handling
+
+def get_current_est_timestamp():
+    """Get current timestamp in EST timezone in YYYY-MM-DD HH:MM:SS format."""
+    try:
+        # Get EST timezone
+        est = pytz.timezone('America/New_York')  # This handles EST/EDT automatically
+        current_time = datetime.now(est)
+        return current_time.strftime('%Y-%m-%d %H:%M:%S')
+    except ImportError:
+        # Fallback if pytz not available - use local time
+        print("   ⚠️  pytz not available, using local system time")
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+def get_db_connection():
+    """Connect directly to your monolith.db SQLite database."""
+    # Your specific database path
+    db_path = r"C:\Users\ChristopherCato\OneDrive - clarity-dx.com\code\monolith\monolith.db"
+    
+    try:
+        print(f"🔗 Connecting to: {db_path}")
+        
+        if not Path(db_path).exists():
+            print(f"❌ Database file not found at: {db_path}")
+            return None
+        
+        conn = sqlite3.connect(db_path)
+        
+        # Test the connection
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        
+        print(f"✅ Successfully connected to monolith.db")
+        return conn
+        
+    except Exception as e:
+        print(f"❌ Database connection failed: {str(e)}")
+        return None
+def update_database_bill_status(excel_ready_bills, mark_as_paid=True):
+    """
+    Update ProviderBill table to mark bills as paid.
+    
+    Args:
+        excel_ready_bills: List of processed bills
+        mark_as_paid: Whether to actually mark bills as paid
+        
+    Returns:
+        Update report with success/failure details
+    """
+    print(f"🔄 DATABASE UPDATE")
+    print(f"   Mark as paid: {mark_as_paid}")
+    
+    if not mark_as_paid:
+        print(f"   ⚠️  Database updates disabled - bills not marked as paid")
+        print(f"   📋 To enable: set mark_as_paid=True")
+        return {
+            'updated': False,
+            'bill_count': len(excel_ready_bills),
+            'message': 'Database updates disabled'
+        }
+    
+    # Get database connection
+    conn = get_db_connection()
+    if conn is None:
+        return {
+            'updated': False,
+            'bill_count': 0,
+            'message': 'Database connection failed'
+        }
+    # Get bill IDs to update
+    bill_ids = [bill.get('id') for bill in excel_ready_bills]
+    
+    print(f"   🚀 Updating {len(bill_ids)} bills in ProviderBill table...")
+    
+    cursor = conn.cursor()
+    
+    updated_count = 0
+    failed_updates = []
+    
+    try:
+        print(f"   📋 Processing bill updates:")
+        
+        # Show timezone information
+        sample_timestamp = get_current_est_timestamp()
+        print(f"   🕒 Using EST timezone timestamp format: {sample_timestamp}")
+        
+        for bill_id in bill_ids:
+            try:
+                # Get current timestamp in EST
+                current_timestamp = get_current_est_timestamp()
+                
+                # Update the ProviderBill table with both bill_paid and updated_at
+                cursor.execute("""
+                    UPDATE ProviderBill 
+                    SET bill_paid = 'Y',
+                        updated_at = ?
+                    WHERE id = ?
+                """, (current_timestamp, bill_id))
+                
+                # Check if the update actually affected a row
+                if cursor.rowcount > 0:
+                    updated_count += 1
+                    if updated_count <= 10:  # Only show first 10 for brevity
+                        print(f"      ✅ {bill_id}: bill_paid = 'Y', updated_at = '{current_timestamp}' (EST)")
+                    elif updated_count == 11:
+                        print(f"      ... (showing first 10, continuing silently)")
+                else:
+                    failed_updates.append({
+                        'bill_id': bill_id,
+                        'error': 'Bill ID not found in database'
+                    })
+                    print(f"      ❌ {bill_id}: Bill not found")
+                
+            except Exception as e:
+                failed_updates.append({
+                    'bill_id': bill_id,
+                    'error': str(e)
+                })
+                print(f"      ❌ {bill_id}: {str(e)}")
+        
+        # Commit all changes
+        conn.commit()
+        print(f"   ✅ Database commit successful")
+        
+        # Verify updates
+        print(f"   🔍 Verifying updates...")
+        placeholders = ','.join(['?' for _ in bill_ids])
+        verification_sql = f"""
+            SELECT id, bill_paid, updated_at 
+            FROM ProviderBill 
+            WHERE id IN ({placeholders})
+        """
+        cursor.execute(verification_sql, bill_ids)
+        verification_results = cursor.fetchall()
+        
+        verified_paid = 0
+        sample_timestamps = []
+        for row in verification_results:
+            if row[1] == 'Y':  # bill_paid column
+                verified_paid += 1
+                if len(sample_timestamps) < 3:  # Collect first 3 timestamps as samples
+                    sample_timestamps.append(row[2])  # updated_at column
+        
+        print(f"   ✅ Verification: {verified_paid}/{len(bill_ids)} bills marked as paid")
+        
+        if sample_timestamps:
+            print(f"   📅 Sample updated_at timestamps (EST):")
+            for i, timestamp in enumerate(sample_timestamps, 1):
+                print(f"      {i}. {timestamp}")
+        
+        # Show the exact timestamp format used
+        final_sample = get_current_est_timestamp()
+        print(f"   🕒 Final timestamp format: {final_sample} (EST)")
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"   ❌ Database error: {str(e)}")
+        print(f"   🔄 All changes rolled back")
+        return {
+            'updated': False,
+            'bill_count': 0,
+            'updated_count': 0,
+            'failed_count': len(bill_ids),
+            'message': f'Database update failed: {str(e)}',
+            'failed_updates': [{'bill_id': bid, 'error': str(e)} for bid in bill_ids]
+        }
+    
+    finally:
+        conn.close()
+    
+    # Return comprehensive update report
+    return {
+        'updated': True,
+        'bill_count': len(bill_ids),
+        'updated_count': updated_count,
+        'failed_count': len(failed_updates),
+        'bill_ids_updated': [bid for bid in bill_ids if bid not in [f['bill_id'] for f in failed_updates]],
+        'failed_updates': failed_updates,
+        'message': f'Successfully updated {updated_count}/{len(bill_ids)} bills'
+    }
+
+# Main Cell 6B Execution
+print("STEP 6B: DATABASE UPDATES")
+print("=" * 60)
+
+if 'excel_ready_bills' in locals() and excel_ready_bills:
+    
+    print(f"📊 READY TO UPDATE DATABASE:")
+    print(f"   Bills to mark as paid: {len(excel_ready_bills)}")
+    
+    # Show sample bills that will be updated
+    print(f"\n📋 Sample bills to update:")
+    for i, bill in enumerate(excel_ready_bills[:5]):
+        bill_id = bill.get('id')
+        patient_name = bill.get('PatientName', 'Unknown')
+        fm_record = bill.get('FileMaker_Record_Number', 'Unknown')
+        line_items = bill.get('line_items', [])
+        total_amount = sum(float(item.get('allowed_amount', 0)) for item in line_items)
+        
+        print(f"   {i+1}. Bill {bill_id}: {patient_name} (FM: {fm_record}) - ${total_amount:.2f}")
+    
+    if len(excel_ready_bills) > 5:
+        print(f"   ... and {len(excel_ready_bills) - 5} more bills")
+    
+    # Calculate total amount
+    total_amount = sum(
+        sum(float(item.get('allowed_amount', 0)) for item in bill.get('line_items', []))
+        for bill in excel_ready_bills
+    )
+    print(f"\n💰 Total amount to be marked as paid: ${total_amount:.2f}")
+    
+    # ⚠️ SAFETY CHECK - Set to False initially for safety
+    PERFORM_DB_UPDATE = True  # Change to True when ready to update database
+    
+    if not PERFORM_DB_UPDATE:
+        print(f"\n⚠️  DATABASE UPDATE DISABLED FOR SAFETY")
+        print(f"   To enable database updates:")
+        print(f"   1. Review the bills above")
+        print(f"   2. Set PERFORM_DB_UPDATE = True")
+        print(f"   3. Re-run this cell")
+        
+        # Still show what would happen
+        update_report = update_database_bill_status(
+            excel_ready_bills, 
+            mark_as_paid=False
+        )
+    else:
+        print(f"\n🚀 PERFORMING DATABASE UPDATES...")
+        print(f"   This will mark {len(excel_ready_bills)} bills as paid")
+        
+        # Perform actual database update
+        update_report = update_database_bill_status(
+            excel_ready_bills, 
+            mark_as_paid=True
+        )
+    
+    # Display results
+    print(f"\n🔄 DATABASE UPDATE RESULTS:")
+    print(f"   Bills processed: {update_report['bill_count']}")
+    
+    if update_report['updated']:
+        print(f"   ✅ Successfully updated: {update_report['updated_count']}")
+        print(f"   ❌ Failed updates: {update_report['failed_count']}")
+        
+        if update_report['failed_count'] > 0:
+            print(f"\n   Failed bills:")
+            for failure in update_report['failed_updates'][:3]:  # Show first 3
+                print(f"      {failure['bill_id']}: {failure['error']}")
+            
+            if len(update_report['failed_updates']) > 3:
+                print(f"      ... and {len(update_report['failed_updates']) - 3} more failures")
+        
+        if update_report['updated_count'] > 0:
+            print(f"\n   ✅ SUCCESSFULLY MARKED AS PAID:")
+            print(f"      {update_report['updated_count']} bills")
+            print(f"      ${total_amount:.2f} total amount")
+            print(f"      Status change: bill_paid = 'N' → 'Y'")
+    else:
+        print(f"   Status: {update_report['message']}")
+    
+    # Summary for next steps
+    print(f"\n✅ CELL 6B COMPLETE!")
+    
+    if update_report['updated'] and update_report['updated_count'] > 0:
+        print(f"   🎉 Database successfully updated!")
+        print(f"   📊 {update_report['updated_count']} bills marked as paid")
+        print(f"   💰 ${total_amount:.2f} processed")
+        
+        # Show what was changed in the database
+        print(f"\n📝 DATABASE CHANGES MADE:")
+        print(f"   Table: ProviderBill")
+        print(f"   Field: bill_paid")
+        print(f"   Change: 'N' → 'Y'")
+        print(f"   Records affected: {update_report['updated_count']}")
+        print(f"   Timestamp: {datetime.now().isoformat()}")
+        
+    elif not PERFORM_DB_UPDATE:
+        print(f"   ⚠️  No database changes made (safety mode)")
+        print(f"   💡 Set PERFORM_DB_UPDATE = True when ready")
+    else:
+        print(f"   ❌ Database update failed")
+        print(f"   📋 Check error messages above")
+
+else:
+    print("❌ No excel_ready_bills available from previous steps")
+    print("   Please run Cells 1-6 first")
+
+print(f"\n🎯 Next Steps:")
+if 'update_report' in locals() and update_report.get('updated') and update_report.get('updated_count', 0) > 0:
+    print(f"   1. ✅ Database updated - bills marked as paid")
+    print(f"   2. ✅ Ready for final processing steps")
+    print(f"   3. ✅ Excel and EOBR generation can proceed")
+elif 'PERFORM_DB_UPDATE' in locals() and not PERFORM_DB_UPDATE:
+    print(f"   1. Review bills to be updated above")
+    print(f"   2. Set PERFORM_DB_UPDATE = True when ready")
+    print(f"   3. Re-run this cell to update database")
+else:
+    print(f"   1. Check database connection and utilities")
+    print(f"   2. Ensure bills are available from previous steps")
+    print(f"   3. Retry database update")
+
 # %% [markdown]
 # -- Cell 7: EOBR Data Mapping and Validation
 
@@ -1780,6 +2120,35 @@ else:
 
 print("STEP 7: EOBR DATA MAPPING AND VALIDATION")
 print("=" * 60)
+
+def validate_and_fix_pos_code(pos_code, line_item_number, bill_id):
+    """
+    Validate POS code and restrict to only '11' (Office).
+    Organization policy: Only office visits allowed.
+    
+    Args:
+        pos_code: The place of service code to validate
+        line_item_number: Line item number for logging
+        bill_id: Bill ID for logging
+        
+    Returns:
+        Tuple of (validated_pos_code, warning_message)
+    """
+    # Convert to string and clean
+    if pos_code is None or pos_code == '':
+        return '11', f"Empty POS code defaulted to '11' (Office)"
+    
+    pos_str = str(pos_code).strip()
+    
+    # Pad single digits with leading zero if needed
+    if pos_str.isdigit() and len(pos_str) == 1:
+        pos_str = '0' + pos_str
+    
+    # POLICY: Only allow '11' (Office) - reject all others
+    if pos_str == '11':
+        return '11', None  # Valid, no warning
+    else:
+        return '11', f"POS '{pos_code}' → '11' (POLICY: Office visits only)"
 
 def validate_eobr_data_mapping_fixed(cleaned_bills):
     """
@@ -1793,10 +2162,12 @@ def validate_eobr_data_mapping_fixed(cleaned_bills):
         Tuple of (eobr_ready_bills, mapping_report)
     """
     print("🔍 VALIDATING DATA MAPPING FOR EOBR GENERATION (FIXED TO MATCH GENERATOR)")
+    print("🏥 POS CODE POLICY: Only '11' (Office) allowed - all others will be converted")
     print("=" * 50)
     
     eobr_ready_bills = []
     mapping_issues = []
+    pos_conversions = []  # Track POS code conversions for reporting
     
     # EXACT mapping from eobr_generator.py prepare_bill_data() method:
     required_bill_fields = {
@@ -1885,14 +2256,27 @@ def validate_eobr_data_mapping_fixed(cleaned_bills):
                         status = "⚪" if not value else "✅"  # Optional
                         print(f"         {source_field} → <{placeholder}>: '{value}' {status}")
                     elif source_field == 'place_of_service':
-                        if not value:
-                            item[source_field] = '11'  # Generator sets default
-                            value = '11'
-                            status = "🔧"
-                            print(f"         {source_field} → <{placeholder}>: '11' (default) {status}")
+                        # NEW POS VALIDATION WITH POLICY ENFORCEMENT
+                        validated_pos, warning = validate_and_fix_pos_code(value, j+1, bill_id)
+                        
+                        if warning:
+                            print(f"         {source_field} → <{placeholder}>: '{validated_pos}' 🔧")
+                            print(f"           WARNING: {warning}")
+                            # Track conversion for reporting
+                            pos_conversions.append({
+                                'bill_id': bill_id,
+                                'patient_name': patient_name,
+                                'line_item': j+1,
+                                'original_pos': value,
+                                'converted_pos': validated_pos,
+                                'reason': warning
+                            })
+                            # Update the item with the corrected value
+                            item[source_field] = validated_pos
                         else:
-                            status = "✅"
-                            print(f"         {source_field} → <{placeholder}>: '{value}' {status}")
+                            print(f"         {source_field} → <{placeholder}>: '{validated_pos}' ✅")
+                        
+                        value = validated_pos
                     else:
                         status = "✅" if value else "❌"
                         print(f"         {source_field} → <{placeholder}>: '{value}' {status}")
@@ -1968,6 +2352,7 @@ def validate_eobr_data_mapping_fixed(cleaned_bills):
         'eobr_ready_count': len(eobr_ready_bills),
         'issues_count': len(mapping_issues),
         'mapping_issues': mapping_issues,
+        'pos_conversions': pos_conversions,  # NEW: Track POS conversions
         'validation_timestamp': datetime.now().isoformat()
     }
     
@@ -1975,6 +2360,31 @@ def validate_eobr_data_mapping_fixed(cleaned_bills):
     print(f"   Total bills: {mapping_report['total_bills']}")
     print(f"   EOBR ready: {mapping_report['eobr_ready_count']}")
     print(f"   With issues: {mapping_report['issues_count']}")
+    print(f"   POS conversions: {len(pos_conversions)}")
+    
+    # Show POS conversion summary
+    if pos_conversions:
+        print(f"\n🏥 POS CODE CONVERSIONS APPLIED:")
+        print(f"   Policy: Only POS '11' (Office) allowed")
+        
+        # Group by original POS code
+        from collections import defaultdict
+        pos_groups = defaultdict(int)
+        for conversion in pos_conversions:
+            orig_pos = conversion['original_pos'] if conversion['original_pos'] else 'EMPTY'
+            pos_groups[orig_pos] += 1
+        
+        for orig_pos, count in pos_groups.items():
+            print(f"   '{orig_pos}' → '11': {count} line items")
+        
+        # Show sample conversions
+        print(f"\n   📋 Sample conversions:")
+        for conversion in pos_conversions[:5]:  # Show first 5
+            bill_short = conversion['bill_id'][:10] + "..." if len(conversion['bill_id']) > 10 else conversion['bill_id']
+            print(f"   {bill_short} Line {conversion['line_item']}: '{conversion['original_pos']}' → '11'")
+        
+        if len(pos_conversions) > 5:
+            print(f"   ... and {len(pos_conversions) - 5} more conversions")
     
     if mapping_issues:
         print(f"\n❌ ISSUES TO RESOLVE:")
@@ -2100,6 +2510,16 @@ if 'cleaned_bills' in locals() and cleaned_bills:
         print(f"\nFooter:")
         print(f"   'total_paid': CALCULATED = '${total_paid:.2f}'")
         
+        # Show POS policy enforcement summary
+        pos_conversion_count = len(mapping_report.get('pos_conversions', []))
+        if pos_conversion_count > 0:
+            print(f"\n🏥 POS CODE POLICY ENFORCED:")
+            print(f"   ✅ {pos_conversion_count} line items converted to POS '11' (Office)")
+            print(f"   ✅ All EOBRs will show consistent 'Office' place of service")
+        else:
+            print(f"\n🏥 POS CODE POLICY:")
+            print(f"   ✅ All line items already have POS '11' (Office)")
+        
         print(f"\n🚀 Ready for Cell 8: EOBR Generation!")
         
     else:
@@ -2128,8 +2548,7 @@ else:
 # -- Cell 8: EOBR Document Generation
 
 # %%
-# %%
-# Cell 8: EOBR Document Generation (FINAL - Synchronized with Excel)
+# Cell 8: EOBR Document Generation (FINAL - with ProviderBill ID Filenames)
 # =============================================================================
 
 from utils.eobr_generator import EOBRGenerator
@@ -2138,7 +2557,7 @@ from datetime import datetime
 import re
 from docx import Document
 
-print("STEP 8: EOBR DOCUMENT GENERATION (FINAL - SYNCHRONIZED)")
+print("STEP 8: EOBR DOCUMENT GENERATION (FINAL - PROVIDERBILL ID FILENAMES)")
 print("=" * 60)
 
 class FinalEOBRGenerator(EOBRGenerator):
@@ -2146,7 +2565,7 @@ class FinalEOBRGenerator(EOBRGenerator):
     Final EOBR Generator with:
     1. Fixed placeholder replacement (handles split placeholders)
     2. Synchronized EOBR numbering with Excel generator
-    3. EOBR control number as filename
+    3. ProviderBill ID as filename (instead of EOBR control number)
     """
     
     def get_eobr_control_number(self, bill):
@@ -2240,24 +2659,25 @@ class FinalEOBRGenerator(EOBRGenerator):
     
     def generate_eobr_final(self, bill: dict, output_dir: Path) -> tuple:
         """
-        Generate EOBR with synchronized numbering and control number as filename.
+        Generate EOBR with ProviderBill ID as filename.
         
         Args:
             bill: Bill dictionary
             output_dir: Output directory
             
         Returns:
-            Tuple of (success: bool, output_path: Path, eobr_number: str)
+            Tuple of (success: bool, output_path: Path, bill_id: str)
         """
         try:
             bill_id = bill.get('id', 'unknown')
             patient_name = bill.get('PatientName', 'Unknown')
             
-            # Generate EOBR control number (same logic as Excel)
+            # Generate EOBR control number (for document content)
             eobr_number = self.get_eobr_control_number(bill)
             
             print(f"📄 Generating EOBR for {patient_name} (Bill: {bill_id})")
             print(f"🎯 EOBR Control Number: {eobr_number}")
+            print(f"📁 Filename will be: {bill_id}.docx")
             
             # Fix dates for the generator
             fixed_bill = self.fix_dates_for_generator(bill)
@@ -2268,7 +2688,7 @@ class FinalEOBRGenerator(EOBRGenerator):
             # OVERRIDE order_no with our synchronized EOBR number
             data['order_no'] = eobr_number
             
-            print(f"📋 Overriding <order_no> with: {eobr_number}")
+            print(f"📋 Document <order_no>: {eobr_number}")
             
             # Load template
             doc = Document(str(self.template_path))
@@ -2276,8 +2696,8 @@ class FinalEOBRGenerator(EOBRGenerator):
             # Use FIXED placeholder replacement
             self.replace_placeholders_in_document_fixed(doc, data)
             
-            # Create filename using EOBR control number
-            filename = f"{eobr_number}.docx"
+            # Create filename using ProviderBill ID
+            filename = f"{bill_id}.docx"
             output_path = output_dir / filename
             
             # Ensure output directory exists
@@ -2290,10 +2710,10 @@ class FinalEOBRGenerator(EOBRGenerator):
             if output_path.exists() and output_path.stat().st_size > 0:
                 file_size = output_path.stat().st_size
                 print(f"✅ EOBR saved as: {filename} ({file_size:,} bytes)")
-                return True, output_path, eobr_number
+                return True, output_path, bill_id
             else:
                 print(f"❌ EOBR file not created or empty")
-                return False, output_path, eobr_number
+                return False, output_path, bill_id
             
         except Exception as e:
             print(f"❌ Error generating EOBR: {str(e)}")
@@ -2325,7 +2745,7 @@ class FinalEOBRGenerator(EOBRGenerator):
 
 def generate_final_eobrs(eobr_ready_bills, output_dir):
     """
-    Generate EOBRs with final synchronized numbering and naming.
+    Generate EOBRs with ProviderBill ID filenames.
     
     Args:
         eobr_ready_bills: List of validated bills
@@ -2345,10 +2765,10 @@ def generate_final_eobrs(eobr_ready_bills, output_dir):
     eobr_output_dir = output_dir / "eobrs"
     eobr_output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"🚀 GENERATING FINAL SYNCHRONIZED EOBRS")
+    print(f"🚀 GENERATING FINAL EOBRS WITH PROVIDERBILL ID FILENAMES")
     print(f"   Bills to process: {len(eobr_ready_bills)}")
     print(f"   Output directory: {eobr_output_dir}")
-    print(f"   Filename format: [EOBR_Control_Number].docx")
+    print(f"   Filename format: [ProviderBill_ID].docx")
     
     try:
         # Initialize final EOBR generator
@@ -2356,7 +2776,7 @@ def generate_final_eobrs(eobr_ready_bills, output_dir):
         print(f"   📋 Template: {generator.template_path}")
         
         generated_files = []
-        eobr_numbers = []
+        bill_ids_generated = []
         total_amount = 0.0
         
         print(f"\n📄 PROCESSING BILLS:")
@@ -2366,11 +2786,11 @@ def generate_final_eobrs(eobr_ready_bills, output_dir):
             print(f"\n--- Bill {i+1}/{len(eobr_ready_bills)} ---")
             
             # Generate EOBR
-            success, output_path, eobr_number = generator.generate_eobr_final(bill, eobr_output_dir)
+            success, output_path, bill_id = generator.generate_eobr_final(bill, eobr_output_dir)
             
             if success:
                 generated_files.append(output_path)
-                eobr_numbers.append(eobr_number)
+                bill_ids_generated.append(bill_id)
                 
                 # Calculate amount for summary
                 line_items = bill.get('line_items', [])
@@ -2390,9 +2810,9 @@ def generate_final_eobrs(eobr_ready_bills, output_dir):
         
         # Show generated files
         if generated_files:
-            print(f"\n📋 GENERATED EOBR FILES:")
+            print(f"\n📋 GENERATED EOBR FILES (ProviderBill ID Filenames):")
             print("-" * 30)
-            for i, (file_path, eobr_num) in enumerate(zip(generated_files[:10], eobr_numbers[:10])):
+            for i, (file_path, bill_id) in enumerate(zip(generated_files[:10], bill_ids_generated[:10])):
                 file_size = file_path.stat().st_size if file_path.exists() else 0
                 print(f"   {i+1:2d}. {file_path.name} ({file_size:,} bytes)")
             
@@ -2409,7 +2829,7 @@ def generate_final_eobrs(eobr_ready_bills, output_dir):
         return {
             'success': True,
             'generated_files': generated_files,
-            'eobr_numbers': eobr_numbers,
+            'bill_ids': bill_ids_generated,
             'output_directory': eobr_output_dir,
             'bills_processed': len(eobr_ready_bills),
             'files_generated': len(generated_files),
@@ -2436,8 +2856,8 @@ if 'eobr_ready_bills' in locals() and eobr_ready_bills:
         output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Starting FINAL EOBR generation for {len(eobr_ready_bills)} bills...")
-    print(f"🔗 Synchronized with Excel EOBR numbering")
-    print(f"📁 Filename = EOBR Control Number")
+    print(f"📁 Filename = ProviderBill ID")
+    print(f"🎯 EOBR Control Number = Document content only")
     
     eobr_result = generate_final_eobrs(eobr_ready_bills, output_dir)
     
@@ -2449,27 +2869,27 @@ if 'eobr_ready_bills' in locals() and eobr_ready_bills:
         print(f"   💰 Total Amount: ${eobr_result['total_amount']:.2f}")
         print(f"   📊 Success Rate: {eobr_result['files_generated']/eobr_result['bills_processed']*100:.1f}%")
         
-        print(f"\n🔗 EXCEL INTEGRATION:")
-        print(f"   ✅ EOBR Control Numbers match Excel exactly")
-        print(f"   ✅ Filenames are the EOBR Control Numbers")
-        print(f"   ✅ Easy to match Excel rows to EOBR files")
+        print(f"\n📁 FILENAME STRUCTURE:")
+        print(f"   ✅ Filenames use ProviderBill ID (easy database lookup)")
+        print(f"   ✅ EOBR Control Numbers are in document content")
+        print(f"   ✅ Perfect for matching files to database records")
         
         print(f"\n📁 FILE STRUCTURE:")
         print(f"   {output_dir}/")
         print(f"   ├── excel/")
         print(f"   │   └── batch_payment_data.xlsx")
         print(f"   ├── eobrs/")
-        print(f"   │   ├── 2024122212201-1.docx")
-        print(f"   │   ├── 2024122212201-2.docx")
+        print(f"   │   ├── BILL_12345.docx")
+        print(f"   │   ├── BILL_12346.docx")
         print(f"   │   └── ... ({eobr_result['files_generated']} files)")
         print(f"   └── audit/")
         print(f"       └── audit_log_[timestamp].xlsx")
         
-        print(f"\n🎯 NEXT STEPS:")
-        print(f"   1. ✅ EOBRs generated with synchronized numbering")
-        print(f"   2. ✅ Filenames match EOBR Control Numbers")
-        print(f"   3. ✅ Ready to distribute to providers")
-        print(f"   4. ✅ Excel and EOBR systems are synchronized")
+        print(f"\n🎯 BENEFITS OF PROVIDERBILL ID FILENAMES:")
+        print(f"   1. ✅ Easy to find specific bill's EOBR document")
+        print(f"   2. ✅ Perfect for database-driven file lookups")
+        print(f"   3. ✅ Consistent with your Input File field in Excel")
+        print(f"   4. ✅ No complex EOBR numbering needed for filenames")
         
     else:
         print(f"\n❌ EOBR GENERATION FAILED!")
@@ -2481,12 +2901,449 @@ else:
 
 print(f"\n✅ FINAL EOBR GENERATION COMPLETE!")
 
-# Show what the EOBR control numbers will look like
-if 'eobr_result' in locals() and eobr_result.get('success') and eobr_result.get('eobr_numbers'):
-    print(f"\n🔍 SAMPLE EOBR CONTROL NUMBERS GENERATED:")
-    for i, eobr_num in enumerate(eobr_result['eobr_numbers'][:5]):
-        print(f"   {i+1}. {eobr_num}.docx")
-    if len(eobr_result['eobr_numbers']) > 5:
-        print(f"   ... and {len(eobr_result['eobr_numbers']) - 5} more")
+# Show what the filenames will look like
+if 'eobr_result' in locals() and eobr_result.get('success') and eobr_result.get('bill_ids'):
+    print(f"\n🔍 SAMPLE EOBR FILENAMES (ProviderBill IDs):")
+    for i, bill_id in enumerate(eobr_result['bill_ids'][:5]):
+        print(f"   {i+1}. {bill_id}.docx")
+    if len(eobr_result['bill_ids']) > 5:
+        print(f"   ... and {len(eobr_result['bill_ids']) - 5} more")
+
+# %% [markdown]
+# -- Save EOBR docx as PDF
+
+# %%
+# Cell 9: Convert EOBR DOCX Files to PDF
+# =============================================================================
+
+from pathlib import Path
+import os
+import sys
+from datetime import datetime
+
+print("STEP 9: CONVERT EOBR DOCX FILES TO PDF")
+print("=" * 60)
+
+def convert_docx_to_pdf_windows(docx_path, pdf_path):
+    """
+    Convert DOCX to PDF using Microsoft Word COM interface (Windows only).
+    This maintains exact formatting and layout.
+    
+    Args:
+        docx_path: Path to input DOCX file
+        pdf_path: Path to output PDF file
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        import win32com.client
+        
+        # Create Word application
+        word = win32com.client.Dispatch('Word.Application')
+        word.Visible = False  # Don't show Word window
+        word.DisplayAlerts = False  # Don't show dialog boxes
+        
+        # Open the document
+        doc = word.Documents.Open(str(docx_path.absolute()))
+        
+        # Export as PDF (17 = PDF format)
+        doc.ExportAsFixedFormat(
+            OutputFileName=str(pdf_path.absolute()),
+            ExportFormat=17,  # PDF format
+            OptimizeFor=0,    # Optimize for print
+            BitmapMissingFonts=True,
+            DocStructureTags=False,
+            CreateBookmarks=False,
+            UseISO19005_1=False
+        )
+        
+        # Close document and Word
+        doc.Close()
+        word.Quit()
+        
+        return True
+        
+    except ImportError:
+        print(f"   ❌ win32com not available - try: pip install pywin32")
+        return False
+    except Exception as e:
+        print(f"   ❌ Word COM error: {str(e)}")
+        return False
+
+def convert_docx_to_pdf_alternative(docx_path, pdf_path):
+    """
+    Convert DOCX to PDF using python-docx2pdf library.
+    Fallback method if Word COM is not available.
+    
+    Args:
+        docx_path: Path to input DOCX file
+        pdf_path: Path to output PDF file
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        from docx2pdf import convert
+        
+        convert(str(docx_path), str(pdf_path))
+        return True
+        
+    except ImportError:
+        print(f"   ❌ docx2pdf not available - try: pip install docx2pdf")
+        return False
+    except Exception as e:
+        print(f"   ❌ docx2pdf error: {str(e)}")
+        return False
+
+def convert_single_eobr_to_pdf(docx_path, output_dir, test_mode=False):
+    """
+    Convert a single EOBR DOCX file to PDF.
+    
+    Args:
+        docx_path: Path to DOCX file
+        output_dir: Directory for PDF output
+        test_mode: If True, adds detailed logging for testing
+        
+    Returns:
+        tuple: (success: bool, pdf_path: Path)
+    """
+    try:
+        if test_mode:
+            print(f"\n🧪 TEST MODE - Converting single file:")
+            print(f"   📄 Input: {docx_path.name}")
+        
+        # Check if input file exists
+        if not docx_path.exists():
+            print(f"   ❌ Input file not found: {docx_path}")
+            return False, None
+        
+        # Create output PDF path
+        pdf_filename = docx_path.stem + ".pdf"  # Replace .docx with .pdf
+        pdf_path = output_dir / pdf_filename
+        
+        if test_mode:
+            print(f"   📄 Output: {pdf_filename}")
+            print(f"   📁 Full path: {pdf_path}")
+            print(f"   📊 Input size: {docx_path.stat().st_size:,} bytes")
+        
+        # Ensure output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Try Word COM method first (best quality)
+        if test_mode:
+            print(f"   🔄 Attempting Word COM conversion...")
+        
+        success = convert_docx_to_pdf_windows(docx_path, pdf_path)
+        
+        if not success:
+            if test_mode:
+                print(f"   🔄 Word COM failed, trying docx2pdf...")
+            success = convert_docx_to_pdf_alternative(docx_path, pdf_path)
+        
+        if success and pdf_path.exists():
+            pdf_size = pdf_path.stat().st_size
+            if test_mode:
+                print(f"   ✅ Conversion successful!")
+                print(f"   📊 Output size: {pdf_size:,} bytes")
+                print(f"   📁 PDF saved: {pdf_path}")
+            return True, pdf_path
+        else:
+            if test_mode:
+                print(f"   ❌ Conversion failed - PDF not created")
+            return False, None
+            
+    except Exception as e:
+        if test_mode:
+            print(f"   ❌ Error during conversion: {str(e)}")
+        return False, None
+
+def convert_all_eobrs_to_pdf(eobr_directory, test_first=False, max_files=None):
+    """
+    Convert all DOCX files in EOBR directory to PDF and organize files.
+    
+    Args:
+        eobr_directory: Directory containing DOCX files
+        test_first: If True, test on one file first
+        max_files: Maximum number of files to convert (None = all)
+        
+    Returns:
+        Dictionary with conversion results
+    """
+    try:
+        eobr_dir = Path(eobr_directory)
+        
+        if not eobr_dir.exists():
+            return {
+                'success': False,
+                'message': f'EOBR directory not found: {eobr_dir}',
+                'converted_files': []
+            }
+        
+        # Find all DOCX files
+        docx_files = list(eobr_dir.glob("*.docx"))
+        
+        if not docx_files:
+            return {
+                'success': False,
+                'message': f'No DOCX files found in {eobr_dir}',
+                'converted_files': []
+            }
+        
+        print(f"📂 EOBR Directory: {eobr_dir}")
+        print(f"📋 Found {len(docx_files)} DOCX files")
+        
+        # Create organized output directories
+        pdf_output_dir = eobr_dir / "pdfs"
+        docx_archive_dir = eobr_dir / "word_docx"
+        pdf_output_dir.mkdir(exist_ok=True)
+        docx_archive_dir.mkdir(exist_ok=True)
+        
+        print(f"📁 PDF Output: {pdf_output_dir}")
+        print(f"📁 DOCX Archive: {docx_archive_dir}")
+        
+        converted_files = []
+        failed_files = []
+        moved_files = []
+        
+        # TEST MODE: Convert just one file first
+        if test_first:
+            print(f"\n🧪 TEST MODE: Converting and organizing first file only")
+            print("=" * 50)
+            
+            test_file = docx_files[0]
+            success, pdf_path = convert_single_eobr_to_pdf(test_file, pdf_output_dir, test_mode=True)
+            
+            if success:
+                converted_files.append(pdf_path)
+                
+                # Test moving the DOCX file
+                print(f"\n📦 Testing DOCX file organization...")
+                try:
+                    new_docx_path = docx_archive_dir / test_file.name
+                    test_file.rename(new_docx_path)
+                    moved_files.append(new_docx_path)
+                    print(f"   ✅ Moved DOCX: {test_file.name} → word_docx/{test_file.name}")
+                except Exception as e:
+                    print(f"   ❌ Failed to move DOCX: {str(e)}")
+                
+                print(f"\n✅ TEST SUCCESSFUL!")
+                print(f"   📄 PDF Created: {pdf_path.name}")
+                print(f"   📦 DOCX Organized: word_docx/{test_file.name}")
+                print(f"\n💡 To convert ALL files, set test_first=False")
+                
+                return {
+                    'success': True,
+                    'test_mode': True,
+                    'converted_files': converted_files,
+                    'moved_files': moved_files,
+                    'failed_files': failed_files,
+                    'total_files': len(docx_files),
+                    'pdf_directory': pdf_output_dir,
+                    'docx_directory': docx_archive_dir
+                }
+            else:
+                failed_files.append(test_file)
+                print(f"\n❌ TEST FAILED!")
+                print(f"   📄 Failed: {test_file.name}")
+                print(f"\n🔧 TROUBLESHOOTING:")
+                print(f"   1. Install Microsoft Word (for best quality)")
+                print(f"   2. Or install: pip install docx2pdf")
+                print(f"   3. Check file permissions")
+                return {
+                    'success': False,
+                    'test_mode': True,
+                    'converted_files': converted_files,
+                    'moved_files': moved_files,
+                    'failed_files': failed_files,
+                    'total_files': len(docx_files),
+                    'pdf_directory': pdf_output_dir,
+                    'docx_directory': docx_archive_dir
+                }
+        
+        # FULL CONVERSION MODE
+        else:
+            print(f"\n🚀 FULL CONVERSION AND ORGANIZATION MODE")
+            print("=" * 50)
+            
+            files_to_process = docx_files
+            if max_files:
+                files_to_process = docx_files[:max_files]
+                print(f"📊 Processing first {max_files} files")
+            
+            for i, docx_file in enumerate(files_to_process, 1):
+                print(f"\n--- File {i}/{len(files_to_process)}: {docx_file.name} ---")
+                
+                # Convert to PDF
+                success, pdf_path = convert_single_eobr_to_pdf(docx_file, pdf_output_dir, test_mode=False)
+                
+                if success:
+                    converted_files.append(pdf_path)
+                    print(f"   ✅ PDF converted successfully")
+                    
+                    # Move DOCX to archive directory
+                    try:
+                        new_docx_path = docx_archive_dir / docx_file.name
+                        docx_file.rename(new_docx_path)
+                        moved_files.append(new_docx_path)
+                        print(f"   📦 DOCX moved to word_docx/")
+                    except Exception as e:
+                        print(f"   ⚠️  Warning: Could not move DOCX file: {str(e)}")
+                else:
+                    failed_files.append(docx_file)
+                    print(f"   ❌ PDF conversion failed - DOCX file left in place")
+            
+            # Summary
+            print(f"\n📊 CONVERSION AND ORGANIZATION SUMMARY:")
+            print("=" * 45)
+            print(f"   Total DOCX files: {len(docx_files)}")
+            print(f"   Files processed: {len(files_to_process)}")
+            print(f"   Successfully converted to PDF: {len(converted_files)}")
+            print(f"   DOCX files organized: {len(moved_files)}")
+            print(f"   Failed conversions: {len(failed_files)}")
+            print(f"   Success rate: {len(converted_files)/len(files_to_process)*100:.1f}%")
+            
+            if converted_files:
+                total_pdf_size = sum(f.stat().st_size for f in converted_files if f.exists())
+                print(f"   Total PDF size: {total_pdf_size:,} bytes ({total_pdf_size/1024/1024:.1f} MB)")
+            
+            if moved_files:
+                total_docx_size = sum(f.stat().st_size for f in moved_files if f.exists())
+                print(f"   Total DOCX size: {total_docx_size:,} bytes ({total_docx_size/1024/1024:.1f} MB)")
+            
+            print(f"\n📁 FINAL ORGANIZATION:")
+            print(f"   📄 PDFs: {pdf_output_dir}")
+            print(f"   📦 Original DOCX: {docx_archive_dir}")
+            
+            if failed_files:
+                print(f"\n❌ Failed files (left in original location):")
+                for failed_file in failed_files[:5]:  # Show first 5 failures
+                    print(f"      {failed_file.name}")
+                if len(failed_files) > 5:
+                    print(f"      ... and {len(failed_files) - 5} more")
+            
+            return {
+                'success': len(converted_files) > 0,
+                'test_mode': False,
+                'converted_files': converted_files,
+                'moved_files': moved_files,
+                'failed_files': failed_files,
+                'total_files': len(docx_files),
+                'processed_files': len(files_to_process),
+                'pdf_directory': pdf_output_dir,
+                'docx_directory': docx_archive_dir
+            }
+            
+    except Exception as e:
+        print(f"❌ Error in PDF conversion: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'success': False,
+            'message': str(e),
+            'converted_files': []
+        }
+
+# Main Cell 9 Execution
+print("🔍 CHECKING FOR EOBR DIRECTORY...")
+
+# Try to find the EOBR directory from previous steps
+eobr_directory = None
+
+# Check if we have eobr_result from Cell 8
+if 'eobr_result' in locals() and eobr_result.get('success'):
+    eobr_directory = eobr_result.get('output_directory')
+    print(f"✅ Found EOBR directory from Cell 8: {eobr_directory}")
+
+# Fallback: Look for recent batch directories
+if not eobr_directory:
+    batch_dirs = list(Path("batch_outputs").glob("batch_*"))
+    if batch_dirs:
+        # Sort by modification time, get newest
+        newest_batch = max(batch_dirs, key=lambda p: p.stat().st_mtime)
+        potential_eobr_dir = newest_batch / "eobrs"
+        if potential_eobr_dir.exists():
+            eobr_directory = potential_eobr_dir
+            print(f"✅ Found EOBR directory in latest batch: {eobr_directory}")
+
+# Manual override option
+if not eobr_directory:
+    print(f"❌ No EOBR directory found automatically")
+    print(f"💡 You can manually set the directory:")
+    print(f"   eobr_directory = Path('path/to/your/eobr/folder')")
+    print(f"   Then re-run this cell")
+else:
+    print(f"\n🚀 STARTING PDF CONVERSION")
+    print("=" * 60)
+    
+    # CONFIGURATION
+    TEST_FIRST = False  # Set to False to convert all files
+    MAX_FILES = None   # Set to number to limit conversion (e.g., 10)
+    
+    print(f"⚙️  SETTINGS:")
+    print(f"   Test first file only: {TEST_FIRST}")
+    print(f"   Max files to convert: {MAX_FILES if MAX_FILES else 'All'}")
+    
+    # Convert files
+    pdf_result = convert_all_eobrs_to_pdf(
+        eobr_directory=eobr_directory,
+        test_first=TEST_FIRST,
+        max_files=MAX_FILES
+    )
+    
+    # Show results
+    if pdf_result['success']:
+        if pdf_result.get('test_mode'):
+            print(f"\n🎉 TEST CONVERSION AND ORGANIZATION COMPLETE!")
+            print(f"✅ Successfully tested PDF conversion and file organization")
+            print(f"📁 Test PDF created in: {pdf_result['pdf_directory']}")
+            print(f"📦 Test DOCX moved to: {pdf_result['docx_directory']}")
+            
+            print(f"\n🚀 TO CONVERT AND ORGANIZE ALL FILES:")
+            print(f"   1. Change TEST_FIRST = False")
+            print(f"   2. Re-run this cell")
+            print(f"   3. Will convert all {pdf_result['total_files']} DOCX files")
+            print(f"   4. Will organize files into proper directories")
+        else:
+            print(f"\n🎉 FULL CONVERSION AND ORGANIZATION COMPLETE!")
+            print(f"✅ Successfully converted {len(pdf_result['converted_files'])} files to PDF")
+            print(f"✅ Successfully organized {len(pdf_result['moved_files'])} DOCX files")
+            print(f"📁 PDFs saved in: {pdf_result['pdf_directory']}")
+            print(f"📦 DOCX archived in: {pdf_result['docx_directory']}")
+            
+            # Show final directory structure
+            print(f"\n📂 FINAL DIRECTORY STRUCTURE:")
+            print(f"   eobrs/")
+            print(f"   ├── pdfs/")
+            print(f"   │   ├── BILL_12345.pdf")
+            print(f"   │   ├── BILL_12346.pdf")
+            print(f"   │   └── ... ({len(pdf_result['converted_files'])} PDF files)")
+            print(f"   └── word_docx/")
+            print(f"       ├── BILL_12345.docx")
+            print(f"       ├── BILL_12346.docx")
+            print(f"       └── ... ({len(pdf_result['moved_files'])} DOCX files)")
+    else:
+        print(f"\n❌ PDF CONVERSION FAILED!")
+        print(f"Error: {pdf_result.get('message', 'Unknown error')}")
+
+print(f"\n✅ CELL 9 COMPLETE!")
+print(f"\n💡 NEXT STEPS:")
+print(f"   1. First run with TEST_FIRST = True (test 1 file)")
+print(f"   2. If test works, set TEST_FIRST = False (convert all)")
+print(f"   3. PDFs will be in eobrs/pdfs/ directory")
+print(f"   4. Original DOCX files will be in eobrs/word_docx/ directory")
+print(f"   5. Clean, organized file structure for easy access!")
+
+# %% [markdown]
+# -- Cell 4: validate for Excel Gen
+
+# %% [markdown]
+# -- Cell 4: validate for Excel Gen
+
+# %% [markdown]
+# -- Cell 4: validate for Excel Gen
+
+# %% [markdown]
+# -- Cell 4: validate for Excel Gen
 
 
