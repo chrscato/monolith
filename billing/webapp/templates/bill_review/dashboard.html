@@ -25,6 +25,11 @@
     margin-bottom: 1rem;
     color: #495057;
 }
+
+/* Dark mode compatibility for chart title */
+.dark-mode .chart-title {
+    color: #c9d1d9 !important;
+}
 </style>
 {% endblock %}
 
@@ -220,18 +225,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     stepSize: 1,
                     font: {
                         size: 12
-                    }
+                    },
+                    color: document.body.classList.contains('dark-mode') ? '#c9d1d9' : '#495057'
                 },
                 grid: {
                     display: true,
-                    color: 'rgba(0, 0, 0, 0.1)'
+                    color: document.body.classList.contains('dark-mode') ? 'rgba(201, 209, 217, 0.1)' : 'rgba(0, 0, 0, 0.1)'
                 }
             },
             y: {
                 ticks: {
                     font: {
                         size: 12
-                    }
+                    },
+                    color: document.body.classList.contains('dark-mode') ? '#c9d1d9' : '#495057'
                 },
                 grid: {
                     display: false
@@ -239,6 +246,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     };
+
+    // Function to update chart colors for dark mode
+    function updateChartColors() {
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        
+        // Update tooltip background for dark mode
+        if (isDarkMode) {
+            commonOptions.plugins.tooltip.backgroundColor = 'rgba(22, 27, 34, 0.95)';
+        } else {
+            commonOptions.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        }
+        
+        // Update scale colors
+        commonOptions.scales.x.ticks.color = isDarkMode ? '#c9d1d9' : '#495057';
+        commonOptions.scales.y.ticks.color = isDarkMode ? '#c9d1d9' : '#495057';
+        commonOptions.scales.x.grid.color = isDarkMode ? 'rgba(201, 209, 217, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    }
 
     // Status Distribution Chart
     const statusCtx = document.getElementById('statusChart').getContext('2d');
@@ -332,6 +356,18 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('filterForm').submit();
         });
     });
+
+    // Listen for dark mode changes and update charts
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    if (darkModeToggle) {
+        darkModeToggle.addEventListener('click', function() {
+            // Small delay to ensure the class is applied
+            setTimeout(updateChartColors, 100);
+        });
+    }
+
+    // Initial call to set correct colors
+    updateChartColors();
 });
 </script>
 {% endblock %}

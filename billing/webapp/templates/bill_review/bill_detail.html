@@ -98,6 +98,11 @@
     border-radius: 0.375rem;
 }
 
+/* Dark mode compatibility for table responsive */
+.dark-mode .table-responsive {
+    border: 1px solid #30363d !important;
+}
+
 .comparison-highlight {
     background-color: #fff3cd !important;
     animation: highlight-pulse 2s ease-in-out;
@@ -106,6 +111,17 @@
 @keyframes highlight-pulse {
     0%, 100% { background-color: #fff3cd; }
     50% { background-color: #ffeaa7; }
+}
+
+/* Dark mode compatibility for comparison highlight */
+.dark-mode .comparison-highlight {
+    background-color: #2d1b69 !important;
+    animation: highlight-pulse-dark 2s ease-in-out;
+}
+
+@keyframes highlight-pulse-dark {
+    0%, 100% { background-color: #2d1b69; }
+    50% { background-color: #3d1f7a; }
 }
 
 .table-bordered td, .table-bordered th {

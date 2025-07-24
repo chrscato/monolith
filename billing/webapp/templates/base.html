@@ -63,12 +63,43 @@
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const toggle = document.getElementById("darkModeToggle");
-            if (localStorage.getItem("darkMode") === "true") {
+            const icon = toggle.querySelector("i");
+            
+            // Check for saved dark mode preference or default to light mode
+            const isDarkMode = localStorage.getItem("darkMode") === "true";
+            
+            // Apply dark mode on page load if it was previously enabled
+            if (isDarkMode) {
                 document.body.classList.add("dark-mode");
+                icon.classList.remove("bi-moon");
+                icon.classList.add("bi-sun");
+                toggle.innerHTML = '<i class="bi bi-sun"></i> Light Mode';
+            } else {
+                // Ensure light mode is applied (default)
+                document.body.classList.remove("dark-mode");
+                icon.classList.remove("bi-sun");
+                icon.classList.add("bi-moon");
+                toggle.innerHTML = '<i class="bi bi-moon"></i> Dark Mode';
             }
+            
             toggle.addEventListener("click", function() {
-                document.body.classList.toggle("dark-mode");
-                localStorage.setItem("darkMode", document.body.classList.contains("dark-mode"));
+                const isDark = document.body.classList.contains("dark-mode");
+                
+                if (isDark) {
+                    // Switching to light mode
+                    document.body.classList.remove("dark-mode");
+                    icon.classList.remove("bi-sun");
+                    icon.classList.add("bi-moon");
+                    toggle.innerHTML = '<i class="bi bi-moon"></i> Dark Mode';
+                    localStorage.setItem("darkMode", "false");
+                } else {
+                    // Switching to dark mode
+                    document.body.classList.add("dark-mode");
+                    icon.classList.remove("bi-moon");
+                    icon.classList.add("bi-sun");
+                    toggle.innerHTML = '<i class="bi bi-sun"></i> Light Mode';
+                    localStorage.setItem("darkMode", "true");
+                }
             });
         });
     </script>
