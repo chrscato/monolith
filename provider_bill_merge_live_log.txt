@@ -1,0 +1,46 @@
+[2025-07-24 00:28:01] Fetching live VM database...
+[2025-07-24 00:28:02] Successfully fetched live VM database to: C:\Users\CHRIST~1\AppData\Local\Temp\tmp7hm1elcx.db
+[2025-07-24 00:28:02] Comparing ProviderBill and BillLineItem tables...
+[2025-07-24 00:28:02] 
+Analyzing table: ProviderBill
+[2025-07-24 00:28:02]   Local ProviderBill: 1890 rows
+[2025-07-24 00:28:02]   VM ProviderBill: 1859 rows
+[2025-07-24 00:28:02]   Schema match: True
+[2025-07-24 00:28:02]   Primary keys: ['id']
+[2025-07-24 00:28:02] 
+Analyzing table: BillLineItem
+[2025-07-24 00:28:02]   Local BillLineItem: 3043 rows
+[2025-07-24 00:28:02]   VM BillLineItem: 2921 rows
+[2025-07-24 00:28:02]   Schema match: True
+[2025-07-24 00:28:02]   Primary keys: ['id']
+[2025-07-24 00:28:04] Starting specialized merge (Live VM base + new local records)
+[2025-07-24 00:28:04] Fetching live VM database...
+[2025-07-24 00:28:05] Successfully fetched live VM database to: C:\Users\CHRIST~1\AppData\Local\Temp\tmp9j5irikv.db
+[2025-07-24 00:28:05] Database validation passed - all required tables found
+[2025-07-24 00:28:05] Created backup: monolith_backup_before_merge_20250724_002805.db
+[2025-07-24 00:28:05] Comparing ProviderBill and BillLineItem tables...
+[2025-07-24 00:28:05] 
+Analyzing table: ProviderBill
+[2025-07-24 00:28:05]   Local ProviderBill: 1890 rows
+[2025-07-24 00:28:05]   VM ProviderBill: 1859 rows
+[2025-07-24 00:28:05]   Schema match: True
+[2025-07-24 00:28:05]   Primary keys: ['id']
+[2025-07-24 00:28:05] 
+Analyzing table: BillLineItem
+[2025-07-24 00:28:05]   Local BillLineItem: 3043 rows
+[2025-07-24 00:28:05]   VM BillLineItem: 2921 rows
+[2025-07-24 00:28:05]   Schema match: True
+[2025-07-24 00:28:05]   Primary keys: ['id']
+[2025-07-24 00:28:05] Copied live VM database as base to: monolith_merged.db
+[2025-07-24 00:28:05] 
+Processing table: ProviderBill
+[2025-07-24 00:28:05] Finding new records in ProviderBill...
+[2025-07-24 00:28:05]   Found 31 new records in ProviderBill
+[2025-07-24 00:28:05]   Successfully added 31 records to ProviderBill
+[2025-07-24 00:28:05] 
+Processing table: BillLineItem
+[2025-07-24 00:28:05] Finding new records in BillLineItem...
+[2025-07-24 00:28:05]   Found 122 new records in BillLineItem
+[2025-07-24 00:28:05]   Successfully added 122 records to BillLineItem
+[2025-07-24 00:28:05] 
+Merge completed! Total records added: 153
