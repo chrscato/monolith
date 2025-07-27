@@ -211,7 +211,10 @@ class EOBRGenerator:
                 'billing_zip': str(bill.get('provider_billing_postal_code', '')),
                 
                 # Footer
-                'total_paid': self.format_currency(total_paid)
+                'total_paid': self.format_currency(total_paid),
+
+                # MISSING MAPPINGS - ADD THESE:
+               'units2': str(line_items[1].get('units', '')) if len(line_items) > 1 else '',
             }
             
             # Prepare line items (up to 6 slots)
@@ -272,7 +275,13 @@ class EOBRGenerator:
                         f'code{i}': ''
                     })
             
-            logger.debug(f"Prepared EOBR data for bill {bill.get('bill_id', 'unknown')}")
+            # Debug: Print the data dictionary to see what's being mapped
+            logger.info(f"EOBR Data Mappings for bill {bill.get('id', 'unknown')}:")
+            for key, value in data.items():
+                if not value:  # Only show empty mappings
+                    logger.warning(f"  EMPTY: '{key}' = '{value}'")
+                else:
+                    logger.info(f"  '{key}' = '{value}'")
             return data
             
         except Exception as e:
